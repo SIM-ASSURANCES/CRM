@@ -9,6 +9,7 @@ import {
 } from "@/features/accounts/rules";
 import { accountScopeWhere } from "@/features/accounts/scope";
 import type { CreateAccountInput, MergeAccountsInput, UpdateAccountInput } from "@/features/accounts/schemas";
+import { notifyAssigned } from "@/features/notifications/service";
 import { writeAudit } from "@/lib/audit";
 import { can, type Permission } from "@/lib/auth/permissions";
 import type { CurrentUser } from "@/lib/auth/session";
@@ -526,6 +527,14 @@ export async function updateAccount(user: CurrentUser, input: UpdateAccountInput
           },
           tx,
         );
+        await notifyAssigned(tx, {
+          actorUserId: user.id,
+          toUserId: ownerUserId,
+          kind: "account",
+          entityId: existing.id,
+          name: input.legalName,
+          href: `/comptes/${existing.id}`,
+        });
       }
       return { id: existing.id };
     });

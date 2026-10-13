@@ -18,6 +18,7 @@ import type {
   UpdateOpportunityInput,
 } from "@/features/opportunities/schemas";
 import { opportunityScopeWhere } from "@/features/opportunities/scope";
+import { notifyAssigned } from "@/features/notifications/service";
 import { writeAudit } from "@/lib/audit";
 import { can, type Permission } from "@/lib/auth/permissions";
 import type { CurrentUser } from "@/lib/auth/session";
@@ -442,6 +443,14 @@ export async function updateOpportunity(user: CurrentUser, input: UpdateOpportun
         },
         tx,
       );
+      await notifyAssigned(tx, {
+        actorUserId: user.id,
+        toUserId: ownerUserId,
+        kind: "opportunity",
+        entityId: existing.id,
+        name: existing.name,
+        href: `/opportunites/${existing.id}`,
+      });
     }
     return { id: existing.id };
   });

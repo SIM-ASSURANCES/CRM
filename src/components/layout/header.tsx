@@ -6,8 +6,8 @@ import type { Role } from "@/lib/auth/roles";
 type HeaderProps = {
   user: { name: string; email: string; role: Role };
   /**
-   * Notifications à signaler sur la cloche. Aujourd'hui : demandes de réinitialisation de mot de passe en attente
-   * (administrateurs). Le centre de notifications complet viendra au sprint 4.5.
+   * Cloche : notifications non lues (et demandes de réinitialisation en attente pour l'administrateur), avec un lien
+   * vers le centre de notifications.
    */
   notification?: { count: number; href: string; label: string };
 };
@@ -29,21 +29,16 @@ export function Header({ user, notification }: HeaderProps) {
 
   return (
     <header className="flex h-16 shrink-0 items-center justify-end gap-4 border-b border-line bg-white px-6">
-      {notification && count > 0 ? (
-        <Link
-          href={notification.href}
-          title={notification.label}
-          aria-label={`Notifications : ${notification.label}`}
-          className={BELL_CLASSES}
-        >
-          {icon}
-          {badge}
-        </Link>
-      ) : (
-        <button type="button" title="Aucune notification" aria-label="Notifications : aucune" className={BELL_CLASSES}>
-          {icon}
-        </button>
-      )}
+      {/* La cloche mène toujours au centre de notifications, même quand il n'y a rien de nouveau. */}
+      <Link
+        href={notification?.href ?? "/notifications"}
+        title={notification?.label ?? "Notifications"}
+        aria-label={`Notifications : ${notification?.label ?? "aucune"}`}
+        className={BELL_CLASSES}
+      >
+        {icon}
+        {badge}
+      </Link>
 
       <UserMenu name={user.name} email={user.email} role={user.role} />
     </header>

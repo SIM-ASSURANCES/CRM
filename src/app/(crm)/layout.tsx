@@ -1,5 +1,6 @@
 import { Suspense, type ReactNode } from "react";
 import { AppShell } from "@/components/layout/app-shell";
+import { countUnread } from "@/features/notifications/service";
 import { countPendingResetRequests } from "@/features/users/service";
 import { can } from "@/lib/auth/permissions";
 import { requireUser } from "@/lib/auth/session";
@@ -19,9 +20,16 @@ async function AuthenticatedShell({ children }: { children: ReactNode }) {
   // chaque page appelle requireUser() sans cette option et redirige alors vers /change-password.
   const user = await requireUser({ allowPasswordChange: true });
   // Les administrateurs voient sur la cloche les demandes de réinitialisation de mot de passe en attente.
-  const pendingResetRequests = can(user.role, "user:manage") ? await countPendingResetRequests() : 0;
+  const [pendingResetRequests, unreadNotifications] = await Promise.all([
+    can(user.role, "user:manage") ? countPendingResetRequests() : 0,
+    countUnread(user.id),
+  ]);
   return (
-    <AppShell user={{ name: user.name, email: user.email, role: user.role }} pendingResetRequests={pendingResetRequests}>
+    <AppShell
+      user={{ name: user.name, email: user.email, role: user.role }}
+      pendingResetRequests={pendingResetRequests}
+      unreadNotifications={unreadNotifications}
+    >
       {children}
     </AppShell>
   );

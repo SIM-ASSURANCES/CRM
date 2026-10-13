@@ -134,6 +134,19 @@ Code dans `src/features/activities/` (`config`, `schemas`, `service` avec le fil
 - Les relances automatiques et le centre de notifications arrivent au sprint 4.5.
 - `npm run db:seed` crée en développement 6 activités et 4 tâches (dont une en retard) pour `commercial@crm.local`.
 
+## Automatisations et notifications (phase 4, sprint 4.5)
+
+Code dans `src/features/automations/` (`config` des règles, `rules` pures, `engine`, `service` d'administration) et
+`src/features/notifications/`, écrans `/notifications` et `/admin/automatisations`.
+
+- Cinq règles de relance (compte sans activité, prochaine action dépassée, clôture dépassée, rendez-vous imminent,
+  tâche en retard), activables et paramétrables par l'administrateur, avec journal d'exécution.
+- **Idempotent** : une tâche par règle, compte et période ; une notification par destinataire, règle et période
+  (clés uniques en base). Relancer le moteur ne crée jamais de doublon.
+- Déclenchement : bouton « Exécuter maintenant », `npm run jobs:run`, ou `POST /api/jobs/automations` avec
+  `Authorization: Bearer <CRON_SECRET>` (la route est désactivée si `CRON_SECRET` est absent). Exemple de cron :
+  `curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://votre-crm/api/jobs/automations` chaque heure.
+
 ## Administration des utilisateurs (phase 4, sprint 4.1)
 
 Code dans `src/features/users/` (`service`, `teams`, `schemas`) et `src/app/(crm)/admin/`. Réservée au rôle

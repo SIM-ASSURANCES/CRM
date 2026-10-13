@@ -48,6 +48,7 @@ model User {
   activitiesAuthored Activity[]             @relation("ActivityAuthor")
   tasksAssigned      Task[]                 @relation("TaskAssignee")
   tasksCreated       Task[]                 @relation("TaskCreator")
+  notifications      Notification[]
 
   @@index([teamId])
   @@index([role])
@@ -536,8 +537,10 @@ model Task {
   contactId       String?   @map("contact_id") @db.Uuid
   opportunityId   String?   @map("opportunity_id") @db.Uuid
   completedAt     DateTime? @map("completed_at") @db.Timestamptz(3)
-  // user | automation (les tâches créées par les relances automatiques du sprint 4.5)
+  // user | automation (les tâches créées par les relances automatiques)
   origin          String    @default("user")
+  // Clé d'idempotence d'une tâche automatique (règle + objet + période) : un second passage ne la recrée pas.
+  automationKey   String?   @unique @map("automation_key")
   version         Int       @default(1)
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -552,4 +555,65 @@ model Task {
   @@index([accountId])
   @@index([opportunityId])
   @@map("tasks")
+}
+
+// Règle de relance automatique (CDC 6.2) : activable, désactivable, paramétrable. Les lignes sont créées par la
+// migration (une par règle connue) ; l'administrateur modifie `enabled` et `params`.
+model AutomationRule {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  // inactivity | no_next_action | close_date_overdue | meeting_soon | task_overdue
+  code            String   @unique
+  enabled         Boolean  @default(true)
+  params          Json
+  updatedByUserId String?  @map("updated_by_user_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("automation_rules")
+}
+
+// Journal d'exécution : chaque passage d'une règle, avec ce qu'il a évalué, créé et ignoré (CDC 6.2 : « journalisée »).
+model AutomationRun {
+  id                   String    @id @default(uuid(7)) @db.Uuid
+  ruleCode             String    @map("rule_code")
+  // manual | schedule
+  trigger              String
+  startedAt            DateTime  @default(now()) @map("started_at") @db.Timestamptz(3)
+  finishedAt           DateTime? @map("finished_at") @db.Timestamptz(3)
+  // running | success | error
+  status               String    @default("running")
+  evaluated            Int       @default(0)
+  tasksCreated         Int       @default(0) @map("tasks_created")
+  notificationsCreated Int       @default(0) @map("notifications_created")
+  // Éléments déjà traités pour la période : ignorés grâce aux clés d'idempotence.
+  skipped              Int       @default(0)
+  error                String?
+  startedByUserId      String?   @map("started_by_user_id") @db.Uuid
+
+  @@index([ruleCode, startedAt])
+  @@index([startedAt])
+  @@map("automation_runs")
+}
+
+// Notification visible dans le CRM (CDC 6.3). Une seule par destinataire et par clé : c'est la politique anti-spam
+// (regroupement des alertes similaires, fréquence maximale par période).
+model Notification {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  // Règle d'origine (ou « owner_changed », « task_reassigned »).
+  source    String
+  title     String
+  body      String?
+  href      String
+  // Nombre d'éléments regroupés dans cette notification.
+  itemCount Int       @default(1) @map("item_count")
+  dedupeKey String    @map("dedupe_key")
+  readAt    DateTime? @map("read_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, readAt, createdAt])
+  @@map("notifications")
 }

@@ -17,6 +17,7 @@
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
     "db:seed": "tsx --conditions=react-server prisma/seed.ts",
+    "jobs:run": "tsx --conditions=react-server scripts/run-automations.ts",
     "format": "prettier --write ."
   },
   "dependencies": {

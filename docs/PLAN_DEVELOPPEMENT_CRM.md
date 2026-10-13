@@ -639,6 +639,28 @@ Durées indicatives pour une équipe de 3 à 4 personnes (1 lead full-stack, 1�
 
 **Limites connues** : pas d'enregistrement de pièces jointes ni de synchronisation e-mail/calendrier (lot 2) : l'origine « synchronisation » est prête mais aucune activité n'en provient encore ; les relances et alertes automatiques (inactivité, retard, rendez-vous imminent) et le centre de notifications restent au sprint 4.5 ; une tâche créée depuis une fiche ne propose pas de choix de contact dans le formulaire (le contact vient d'un lien préparé) ; le fil est limité aux 100 événements les plus récents par source ; l'interface n'a pas encore été parcourue de bout en bout dans le navigateur par une session authentifiée (vérifications faites sur les services et les tests d'intégration) ; un test d'intégration a échoué une fois, sans pouvoir être reproduit lors de quatre exécutions complètes ultérieures.
 
+### Phase 4, sprint 4.5 — Automatisations et notifications : réalisée à 14/10/2026 (code dans `crm/src/features/automations/`, `notifications/`, `crm/src/app/(crm)/notifications/`, `admin/automatisations/`)
+
+| Élément du plan | État | Détail |
+|---|---|---|
+| Compte sans activité (CDC 6.2) | Fait | Seuil **par segment** : grand compte (effectif ≥ 250) 15 jours, autres comptes 30 jours ; crée une tâche de relance au propriétaire et le notifie ; un rendez-vous futur ne compte pas comme un échange ; comptes archivés, partenaires et propriétaires désactivés ignorés |
+| Opportunité sans prochaine action | Fait, **à interpréter** | La base interdit déjà une opportunité ouverte sans prochaine action : la règle alerte donc quand la **date** de la prochaine action est dépassée (aucune action à venir) |
+| Clôture prévisionnelle dépassée | Fait | Demande au propriétaire de mettre à jour le dossier ; **escalade au manager** de son équipe après un délai paramétrable (7 jours) |
+| Rendez-vous imminent | Fait | Rappel à l'auteur d'un rendez-vous ou d'une visioconférence dans un délai paramétrable (24 h) ; un seul rappel par rendez-vous |
+| Tâche en retard | Fait | Notifie le responsable, puis le manager de son équipe après un délai paramétrable (3 jours) ; un manager n'est jamais prévenu de ses propres retards |
+| Idempotence | Fait | Clés **uniques en base** : tâche = règle + compte + période (`tasks.automation_key`), notification = destinataire + règle + période ; deux passages ou deux exécutions simultanées ne créent rien de plus ; la nouvelle période en recrée |
+| Activation, désactivation, paramètres | Fait | Page `/admin/automatisations` (administrateur) : activation, seuils, fréquences, escalades, bornes validées côté serveur ; changements tracés (`automation.rule_updated`) |
+| Journal d'exécution | Fait | Table `automation_runs` : règle, déclenchement (manuel ou planifié), statut, éléments évalués, tâches et notifications créées, éléments déjà traités, erreur ; une règle en erreur n'empêche pas les suivantes |
+| Centre de notifications (CDC 6.3) | Fait | Page `/notifications` : toutes ou non lues, lues/non lues, **accès direct au dossier**, tout marquer comme lu ; cloche de l'en-tête avec compteur ; chacun ne voit et ne modifie que les siennes |
+| Anti-spam | Fait | **Regroupement** : une notification par destinataire et par règle regroupe tous les éléments (« 3 tâches en retard ») ; **fréquence maximale** par règle (période) |
+| Changements de propriétaire | Fait | Le nouveau responsable d'un compte, d'une opportunité ou d'une tâche est notifié (jamais quand on se l'attribue) |
+| Déclenchement | Fait | Bouton « Exécuter maintenant », script `npm run jobs:run`, et route `POST /api/jobs/automations` protégée par `CRON_SECRET` (404 si le secret est absent, comparaison en temps constant) |
+| Tests | Fait | 346 tests au total (29 d'intégration et 15 unitaires pour ce sprint), lint, `tsc` et build réussis |
+
+**Décision d'architecture** : le plan prévoyait **pg-boss** (file de tâches sur PostgreSQL, processus séparé). Le moteur est à la place une fonction idempotente appelable aussi souvent que voulu (cron, bouton, script) : aucune dépendance ni processus supplémentaire, et les doublons sont impossibles grâce aux clés uniques. pg-boss deviendra utile avec les synchronisations e-mail et calendrier (lot 2), qui ont besoin de reprises et de files.
+
+**Limites connues** : aucun ordonnanceur n'est fourni : il faut programmer l'appel (cron système, tâche planifiée de l'hébergeur) ; pas de notification par e-mail (aucun service d'envoi par décision) ; une notification groupée n'est pas mise à jour si de nouveaux éléments arrivent dans la même période (ils sont signalés à la période suivante) ; les notifications de synchronisation en échec attendent le lot 2 ; une tâche de relance est créée « au nom » de son responsable (pas d'utilisateur système) ; le fuseau est unique (UTC, soit Abidjan) ; l'interface n'a pas été parcourue de bout en bout avec une session authentifiée (vérifications faites sur les services, le script et la route).
+
 ---
 
 ## Annexe — Parcours Excel : synthèse des écrans à construire

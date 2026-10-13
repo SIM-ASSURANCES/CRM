@@ -13,6 +13,7 @@ import {
   UserCog,
   Users,
   UsersRound,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
 import type { Permission } from "@/lib/auth/permissions";
@@ -91,6 +92,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/admin/utilisateurs", label: "Utilisateurs", icon: UserCog, permission: "user:manage" },
       { href: "/admin/demandes", label: "Demandes de réinitialisation", icon: KeyRound, permission: "user:manage" },
       { href: "/admin/equipes", label: "Équipes", icon: UsersRound, permission: "user:manage" },
+      { href: "/admin/automatisations", label: "Automatisations", icon: Workflow, permission: "settings:manage" },
     ],
   },
 ];

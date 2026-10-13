@@ -1,5 +1,6 @@
 import "server-only";
 import { accountScopeWhere } from "@/features/accounts/scope";
+import { notifyAssigned } from "@/features/notifications/service";
 import { opportunityScopeWhere } from "@/features/opportunities/scope";
 import type { TaskView } from "@/features/tasks/config";
 import { daysLate, isDueDateAllowed, isTaskOverdue, todayUtc } from "@/features/tasks/rules";
@@ -272,6 +273,14 @@ export async function updateTask(user: CurrentUser, input: UpdateTaskInput, now:
         },
         tx,
       );
+      await notifyAssigned(tx, {
+        actorUserId: user.id,
+        toUserId: assigneeUserId,
+        kind: "task",
+        entityId: existing.id,
+        name: input.title,
+        href: "/taches",
+      });
     }
     return { id: existing.id };
   });
