@@ -354,6 +354,79 @@ async function seedDemoOpportunities(ownerEmail: string) {
   return count;
 }
 
+/** Activités et tâches de démonstration : un historique réaliste, une tâche en retard et une tâche du jour. */
+async function seedDemoActivity(ownerEmail: string) {
+  const owner = await db.user.findUnique({ where: { email: ownerEmail }, select: { id: true } });
+  if (!owner || (await db.activity.count({ where: { authorUserId: owner.id } })) > 0) return { activities: 0, tasks: 0 };
+
+  const accounts = await db.crmAccount.findMany({ where: { ownerUserId: owner.id }, select: { id: true, legalName: true } });
+  const opportunities = await db.opportunity.findMany({ where: { ownerUserId: owner.id }, select: { id: true, name: true, accountId: true } });
+  const contacts = await db.contact.findMany({ where: { ownerUserId: owner.id }, select: { id: true, lastName: true } });
+  const accountId = (name: string) => accounts.find((a) => a.legalName === name)?.id;
+  const opportunityId = (part: string) => opportunities.find((o) => o.name.includes(part))?.id;
+  const contactId = (lastName: string) => contacts.find((c) => c.lastName === lastName)?.id;
+  const ago = (days: number, hour = 9) => {
+    const base = new Date(Date.now() - days * 86_400_000);
+    return new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), hour));
+  };
+  const inDays = (days: number) => {
+    const base = new Date(Date.now() + days * 86_400_000);
+    return new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate()));
+  };
+
+  const activities = [
+    { type: "call_out", subject: "Appel de découverte du besoin", account: "Ouattara Transport", opportunity: "flotte", contact: "Diabaté", outcome: "Flotte de 42 véhicules ; renouvellement en janvier.", daysAgo: 21 },
+    { type: "meeting", subject: "Rendez-vous sur site", account: "Ouattara Transport", opportunity: "flotte", contact: "Diabaté", outcome: "Visite du parc ; questionnaire de risque remis.", daysAgo: 14 },
+    { type: "email", subject: "Envoi du questionnaire de risque", account: "Ouattara Transport", opportunity: "flotte", contact: "Diabaté", outcome: null, daysAgo: 9 },
+    { type: "proposal_sent", subject: "Proposition commerciale envoyée", account: "Clinique Sainte-Marie", opportunity: "responsabilité civile", contact: "Koné", outcome: "En attente de la validation de la direction.", daysAgo: 4 },
+    { type: "video", subject: "Point de négociation", account: "Groupe Ouattara Holding", opportunity: "assurance groupe", contact: "Ouattara", outcome: "Demande de remise de 5 % ; contre-proposition à étudier.", daysAgo: 2 },
+    { type: "note", subject: "Compte à suivre de près", account: "Imprimerie Centrale", opportunity: null, contact: null, outcome: "Premier contact par téléphone, décideur absent.", daysAgo: 1 },
+  ];
+  let activityCount = 0;
+  for (const item of activities) {
+    const account = accountId(item.account);
+    if (!account) continue;
+    await db.activity.create({
+      data: {
+        type: item.type,
+        subject: item.subject,
+        occurredAt: ago(item.daysAgo),
+        authorUserId: owner.id,
+        accountId: account,
+        contactId: item.contact ? (contactId(item.contact) ?? null) : null,
+        opportunityId: item.opportunity ? (opportunityId(item.opportunity) ?? null) : null,
+        outcome: item.outcome,
+      },
+    });
+    activityCount += 1;
+  }
+
+  const tasks = [
+    { title: "Relancer pour le questionnaire de risque", account: "Ouattara Transport", opportunity: "flotte", due: inDays(-3), priority: "high" },
+    { title: "Préparer la contre-proposition", account: "Groupe Ouattara Holding", opportunity: "assurance groupe", due: inDays(0), priority: "high" },
+    { title: "Appeler la direction de la clinique", account: "Clinique Sainte-Marie", opportunity: "responsabilité civile", due: inDays(3), priority: "normal" },
+    { title: "Qualifier le décideur d'Imprimerie Centrale", account: "Imprimerie Centrale", opportunity: null, due: inDays(7), priority: "low" },
+  ];
+  let taskCount = 0;
+  for (const item of tasks) {
+    const account = accountId(item.account);
+    if (!account) continue;
+    await db.task.create({
+      data: {
+        title: item.title,
+        dueDate: item.due,
+        priority: item.priority,
+        assigneeUserId: owner.id,
+        createdByUserId: owner.id,
+        accountId: account,
+        opportunityId: item.opportunity ? (opportunityId(item.opportunity) ?? null) : null,
+      },
+    });
+    taskCount += 1;
+  }
+  return { activities: activityCount, tasks: taskCount };
+}
+
 async function main() {
   const parsed = schema.safeParse(process.env);
   if (!parsed.success) {
@@ -403,6 +476,9 @@ async function main() {
 
     const opportunities = await seedDemoOpportunities("commercial@crm.local");
     console.log(`Opportunités de démonstration : ${opportunities} créée(s) pour commercial@crm.local.`);
+
+    const activity = await seedDemoActivity("commercial@crm.local");
+    console.log(`Activités de démonstration : ${activity.activities} créée(s), ${activity.tasks} tâche(s) pour commercial@crm.local.`);
   }
 }
 

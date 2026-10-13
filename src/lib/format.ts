@@ -30,6 +30,11 @@ export function toDateInputValue(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
+/** Date → « 2026-10-13T14:05 » (valeur d'un champ <input type="datetime-local">, lue comme UTC). */
+export function toDateTimeInputValue(value: Date): string {
+  return value.toISOString().slice(0, 16);
+}
+
 /** 15 → « +15 % », -5 → « −5 % », 0 → « 0 % ». */
 export function formatSignedPercent(value: number): string {
   const rounded = Math.round(value);

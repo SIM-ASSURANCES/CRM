@@ -18,6 +18,11 @@ export const PERMISSIONS = [
   "contact:write",
   "opportunity:read",
   "opportunity:write",
+  // Activités journalisées et tâches (CDC 6) ; l'audit lit sans écrire. Réaffecter une tâche exige account:assign.
+  "activity:read",
+  "activity:write",
+  "task:read",
+  "task:write",
   "report:export",
   "user:manage",
   "audit:read",
@@ -40,6 +45,10 @@ const MATRIX: Record<Role, readonly Permission[]> = {
     "contact:write",
     "opportunity:read",
     "opportunity:write",
+    "activity:read",
+    "activity:write",
+    "task:read",
+    "task:write",
     "report:export",
   ],
   manager: [
@@ -53,6 +62,10 @@ const MATRIX: Record<Role, readonly Permission[]> = {
     "contact:write",
     "opportunity:read",
     "opportunity:write",
+    "activity:read",
+    "activity:write",
+    "task:read",
+    "task:write",
     "report:export",
   ],
   commercial: [
@@ -65,8 +78,12 @@ const MATRIX: Record<Role, readonly Permission[]> = {
     "contact:write",
     "opportunity:read",
     "opportunity:write",
+    "activity:read",
+    "activity:write",
+    "task:read",
+    "task:write",
   ],
-  audit: ["dashboard:read", "prospect:read", "account:read", "contact:read", "opportunity:read", "audit:read"],
+  audit: ["dashboard:read", "prospect:read", "account:read", "contact:read", "opportunity:read", "activity:read", "task:read", "audit:read"],
 };
 
 export function can(role: Role, permission: Permission): boolean {

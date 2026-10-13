@@ -3,7 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { z } from "zod";
+import { FeedList } from "@/app/(crm)/activites/_components/feed-list";
 import { OpportunityActions } from "@/app/(crm)/opportunites/_components/opportunity-actions";
+import { listFeed, type Feed } from "@/features/activities/service";
 import { OpportunityContacts } from "@/app/(crm)/opportunites/_components/opportunity-contacts";
 import { buttonClasses } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -35,6 +37,10 @@ const FLASH: Record<string, string> = {
   converted: "Prospect converti : le compte, le contact et cette opportunité ont été créés.",
   contact_added: "Contact associé à l'opportunité.",
   contact_removed: "Contact retiré de l'opportunité.",
+  activity_added: "Activité enregistrée.",
+  activity_updated: "Activité modifiée.",
+  task_created: "Tâche créée.",
+  task_updated: "Tâche modifiée.",
 };
 
 const EVENT_LABELS: Record<string, string> = {
@@ -81,10 +87,15 @@ async function OpportunityContent({ params, searchParams }: Props) {
 
   const open = opportunity.status === "open";
   const canWrite = can(user.role, "opportunity:write") && open;
-  const [thresholds, candidates] = await Promise.all([
+  const [thresholds, candidates, feed] = await Promise.all([
     getThresholds(),
     canWrite ? listContactCandidates(user, id) : [],
+    can(user.role, "activity:read") ? listFeed(user, { opportunityId: id }) : (null as Feed | null),
   ]);
+  // Journaliser un échange ou créer une tâche reste possible sur une opportunité clôturée (suivi après-vente).
+  const canLog = can(user.role, "activity:write");
+  const canAddTask = can(user.role, "task:write");
+  const back = encodeURIComponent(`/opportunites/${id}`);
 
   const statusLabel = open ? `${opportunity.stage} % — ${STAGE_LABELS[opportunity.stage as keyof typeof STAGE_LABELS]}` : opportunity.status === "won" ? "Gagnée" : "Perdue";
   const stageIndex = (OPEN_STAGES as readonly number[]).indexOf(opportunity.stage);
@@ -211,6 +222,46 @@ async function OpportunityContent({ params, searchParams }: Props) {
         <h2 id="contacts" className="mb-5 text-lg font-semibold text-ink">Contacts impliqués</h2>
         <OpportunityContacts opportunityId={id} contacts={opportunity.contacts} candidates={candidates} editable={canWrite} />
       </section>
+
+      {feed && (
+        <section aria-labelledby="activites" className="rounded-2xl border border-line bg-white p-6 md:p-8">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <h2 id="activites" className="text-lg font-semibold text-ink">Activités et tâches</h2>
+            <div className="flex flex-wrap gap-3">
+              {canLog && (
+                <Link
+                  href={`/activites/nouveau?compte=${opportunity.accountId}&opportunite=${id}&retour=${back}`}
+                  className={buttonClasses("secondary")}
+                >
+                  Journaliser une activité
+                </Link>
+              )}
+              {canAddTask && (
+                <Link
+                  href={`/taches/nouveau?compte=${opportunity.accountId}&opportunite=${id}&retour=${back}`}
+                  className={buttonClasses("secondary")}
+                >
+                  Nouvelle tâche
+                </Link>
+              )}
+            </div>
+          </div>
+          <FeedList
+            items={feed.items.slice(0, 30)}
+            truncated={feed.truncated || feed.items.length > 30}
+            hideAccount
+            returnTo={`/opportunites/${id}`}
+            emptyText="Aucune activité sur cette opportunité."
+          />
+          {feed.items.length > 0 && (
+            <p className="mt-4 text-sm">
+              <Link href={`/activites?opportunite=${id}`} className="font-medium text-brand-700 hover:underline">
+                Voir le fil complet et le filtrer
+              </Link>
+            </p>
+          )}
+        </section>
+      )}
 
       <section aria-labelledby="historique" className="rounded-2xl border border-line bg-white p-6 md:p-8">
         <h2 id="historique" className="mb-5 text-lg font-semibold text-ink">Historique</h2>

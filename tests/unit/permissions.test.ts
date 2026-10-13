@@ -53,6 +53,19 @@ describe("permissions", () => {
     }
   });
 
+  it("donne la lecture des activités et tâches à tous, l'écriture à tous sauf l'audit", () => {
+    for (const role of ["admin", "direction", "manager", "commercial", "audit"] as const) {
+      expect(can(role, "activity:read")).toBe(true);
+      expect(can(role, "task:read")).toBe(true);
+    }
+    expect(can("audit", "activity:write")).toBe(false);
+    expect(can("audit", "task:write")).toBe(false);
+    for (const role of ["admin", "direction", "manager", "commercial"] as const) {
+      expect(can(role, "activity:write")).toBe(true);
+      expect(can(role, "task:write")).toBe(true);
+    }
+  });
+
   it("réserve la fusion de doublons à la direction et à l'administrateur (CDC 3.2)", () => {
     expect(can("admin", "account:merge")).toBe(true);
     expect(can("direction", "account:merge")).toBe(true);

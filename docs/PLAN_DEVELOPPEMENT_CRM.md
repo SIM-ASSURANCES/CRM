@@ -621,6 +621,24 @@ Durées indicatives pour une équipe de 3 à 4 personnes (1 lead full-stack, 1�
 
 **Limites connues** : les étapes sont des constantes (pas de table `pipeline_stages` configurable) ; les contacts d'opportunité ne sont pas reliés aux rôles d'achat par produit (`contact_roles`) ; la définition comptable du revenu (prime, commission, honoraires) n'est pas tranchée (section 12, question 6) ; la conversion et le glisser-déposer n'ont pas de test de bout en bout (Playwright) : la conversion est couverte par les tests d'intégration, le Kanban a été vérifié à la main via le sélecteur ; la fusion de contacts en double n'est pas implémentée ; le Kanban est limité à 500 opportunités ouvertes.
 
+### Phase 4, sprint 4.4 — Activités et tâches : réalisée à 13/10/2026 (code dans `crm/src/features/activities/`, `tasks/` et `crm/src/app/(crm)/activites/`, `taches/`)
+
+| Élément du plan | État | Détail |
+|---|---|---|
+| Types d'activités (CDC 6.1) | Fait | Appel entrant/sortant, e-mail, rendez-vous, visioconférence, note interne, envoi de proposition, étape contractuelle ; objet, date et heure, auteur, compte, contact et opportunité éventuels, résultat, prochaine action |
+| Fil unifié (CDC 3.4) | Fait | Activités, tâches et changements d'étape fusionnés du plus récent au plus ancien ; **origine visible** (saisie utilisateur, synchronisation, automatisation) ; filtres type, période, contact, opportunité, compte et auteur ; intégré aux fiches compte et opportunité, et page `/activites` |
+| Prochaine action | Fait | Une activité liée à une opportunité **ouverte** met à jour sa prochaine action (version incrémentée, audit) ; ni l'opportunité clôturée ni l'activité sans prochaine action ne sont touchées |
+| Tâches (CDC 6) | Fait | Titre, description, échéance (un jour), priorité, **responsable obligatoire**, lien compte / contact / opportunité ; terminer, annuler, rouvrir ; date de réalisation posée par le serveur ; vues « à faire », « en retard », « aujourd'hui », « terminées » avec compteurs |
+| Règles des tâches | Fait | Échéance dans le passé refusée à la création ; retard = ouverte et échéance antérieure à aujourd'hui (UTC) ; réaffectation réservée aux profils pouvant réaffecter (`account:assign`) ; l'audit ne peut pas être responsable ; une tâche terminée ne se modifie plus |
+| Cohérence des liens | Fait | Le contact doit être rattaché au compte ; l'opportunité impose son compte ; une activité ne change pas de compte |
+| Périmètre et permissions | Fait | `activity:read/write`, `task:read/write` ; une activité n'est visible que par ceux qui voient son compte ; une tâche par son responsable, son créateur, l'équipe (manager) ou le compte lié ; l'audit lit sans écrire |
+| Correction | Fait | Une activité se corrige par son auteur ou un profil pouvant réaffecter ; une activité synchronisée ou automatique est en lecture seule ; verrou optimiste (409) |
+| Contraintes en base | Fait | Types, origines, statuts et priorités autorisés ; tâche terminée ⇔ date de réalisation ; date de prochaine action ⇒ action |
+| Audit | Fait | `activity.created/updated`, `task.created/updated/reassigned/completed/cancelled/reopened` (identifiants et noms de champs, jamais les contenus) |
+| Tests | Fait | 302 tests au total (dont 24 d'intégration et 17 unitaires pour ce sprint), lint, `tsc` et build réussis |
+
+**Limites connues** : pas d'enregistrement de pièces jointes ni de synchronisation e-mail/calendrier (lot 2) : l'origine « synchronisation » est prête mais aucune activité n'en provient encore ; les relances et alertes automatiques (inactivité, retard, rendez-vous imminent) et le centre de notifications restent au sprint 4.5 ; une tâche créée depuis une fiche ne propose pas de choix de contact dans le formulaire (le contact vient d'un lien préparé) ; le fil est limité aux 100 événements les plus récents par source ; l'interface n'a pas encore été parcourue de bout en bout dans le navigateur par une session authentifiée (vérifications faites sur les services et les tests d'intégration) ; un test d'intégration a échoué une fois, sans pouvoir être reproduit lors de quatre exécutions complètes ultérieures.
+
 ---
 
 ## Annexe — Parcours Excel : synthèse des écrans à construire

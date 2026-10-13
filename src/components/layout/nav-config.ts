@@ -1,9 +1,11 @@
 import {
+  Activity,
   Building2,
   ContactRound,
   Handshake,
   KeyRound,
   LayoutDashboard,
+  ListChecks,
   Percent,
   Send,
   TrendingUp,
@@ -54,6 +56,13 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/comptes", label: "Comptes", icon: Building2, permission: "account:read" },
       { href: "/contacts", label: "Contacts", icon: ContactRound, permission: "contact:read" },
       { href: "/opportunites", label: "Opportunités", icon: Handshake, permission: "opportunity:read" },
+    ],
+  },
+  {
+    label: "Suivi",
+    items: [
+      { href: "/taches", label: "Tâches", icon: ListChecks, permission: "task:read" },
+      { href: "/activites", label: "Activités", icon: Activity, permission: "activity:read" },
     ],
   },
   {

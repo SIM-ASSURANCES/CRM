@@ -104,6 +104,8 @@ describe.skipIf(!hasDb)("opportunités et conversion (PostgreSQL)", () => {
   beforeEach(async () => {
     await db.leadEvent.deleteMany();
     await db.lead.deleteMany();
+    await db.activity.deleteMany();
+    await db.task.deleteMany();
     await db.opportunityContact.deleteMany();
     await db.opportunityEvent.deleteMany();
     await db.opportunity.deleteMany();

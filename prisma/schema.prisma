@@ -45,6 +45,9 @@ model User {
   contactsOwned      Contact[]              @relation("ContactOwner")
   opportunitiesOwned Opportunity[]          @relation("OpportunityOwner")
   opportunityEvents  OpportunityEvent[]
+  activitiesAuthored Activity[]             @relation("ActivityAuthor")
+  tasksAssigned      Task[]                 @relation("TaskAssignee")
+  tasksCreated       Task[]                 @relation("TaskCreator")
 
   @@index([teamId])
   @@index([role])
@@ -309,6 +312,8 @@ model CrmAccount {
   owner          User             @relation("AccountOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
   contacts       AccountContact[]
   opportunities  Opportunity[]
+  activities     Activity[]
+  tasks          Task[]
   convertedLeads Lead[]           @relation("LeadConvertedAccount")
 
   @@index([ownerUserId, status])
@@ -342,6 +347,8 @@ model Contact {
   owner          User                 @relation("ContactOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
   accounts       AccountContact[]
   opportunities  OpportunityContact[]
+  activities     Activity[]
+  tasks          Task[]
   convertedLeads Lead[]               @relation("LeadConvertedContact")
 
   @@index([ownerUserId])
@@ -430,6 +437,8 @@ model Opportunity {
   product       Product?             @relation(fields: [productId], references: [id], onDelete: Restrict)
   contacts      OpportunityContact[]
   events        OpportunityEvent[]
+  activities    Activity[]
+  tasks         Task[]
   convertedFrom Lead[]               @relation("LeadConvertedOpportunity")
 
   @@index([ownerUserId, status, stage])
@@ -476,4 +485,71 @@ model OpportunityEvent {
   @@index([opportunityId, occurredAt])
   @@index([occurredAt, type])
   @@map("opportunity_events")
+}
+
+// Activité journalisée (CDC 6.1) : appel, e-mail, rendez-vous… Liée à un compte et, selon le cas, à un contact et
+// une opportunité. L'origine distingue la saisie utilisateur, la synchronisation et l'automatisation (CDC 3.4).
+model Activity {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  // call_in | call_out | email | meeting | video | note | proposal_sent | contract_step
+  type           String
+  subject        String
+  occurredAt     DateTime  @map("occurred_at") @db.Timestamptz(3)
+  authorUserId   String    @map("author_user_id") @db.Uuid
+  accountId      String    @map("account_id") @db.Uuid
+  contactId      String?   @map("contact_id") @db.Uuid
+  opportunityId  String?   @map("opportunity_id") @db.Uuid
+  outcome        String?
+  nextAction     String?   @map("next_action")
+  nextActionDate DateTime? @map("next_action_date") @db.Date
+  // user | sync | automation
+  origin         String    @default("user")
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  author      User         @relation("ActivityAuthor", fields: [authorUserId], references: [id], onDelete: Restrict)
+  account     CrmAccount   @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  contact     Contact?     @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, occurredAt])
+  @@index([opportunityId, occurredAt])
+  @@index([contactId])
+  @@index([authorUserId, occurredAt])
+  @@map("activities")
+}
+
+// Tâche (CDC 6) : toute tâche ouverte a un responsable. Liée à un objet métier (compte, contact, opportunité).
+model Task {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  title           String
+  description     String?
+  dueDate         DateTime  @map("due_date") @db.Date
+  // open | done | cancelled
+  status          String    @default("open")
+  // low | normal | high
+  priority        String    @default("normal")
+  assigneeUserId  String    @map("assignee_user_id") @db.Uuid
+  createdByUserId String    @map("created_by_user_id") @db.Uuid
+  accountId       String?   @map("account_id") @db.Uuid
+  contactId       String?   @map("contact_id") @db.Uuid
+  opportunityId   String?   @map("opportunity_id") @db.Uuid
+  completedAt     DateTime? @map("completed_at") @db.Timestamptz(3)
+  // user | automation (les tâches créées par les relances automatiques du sprint 4.5)
+  origin          String    @default("user")
+  version         Int       @default(1)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  assignee    User         @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: Restrict)
+  createdBy   User         @relation("TaskCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  account     CrmAccount?  @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  contact     Contact?     @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+
+  @@index([assigneeUserId, status, dueDate])
+  @@index([accountId])
+  @@index([opportunityId])
+  @@map("tasks")
 }

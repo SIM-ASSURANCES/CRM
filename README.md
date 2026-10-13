@@ -122,6 +122,18 @@ Code dans `src/features/opportunities/` (`config`, `schemas`, `rules` pures, `sc
   rattachement possible à un compte existant) ; le prospect et son historique sont conservés.
 - `npm run db:seed` crée en développement 8 opportunités (une par étape ouverte, une gagnée, une perdue).
 
+## Activités et tâches (phase 4, sprint 4.4)
+
+Code dans `src/features/activities/` (`config`, `schemas`, `service` avec le fil unifié) et `src/features/tasks/`
+(`config`, `rules` pures, `schemas`, `scope`, `service`), écrans dans `src/app/(crm)/activites/` et `taches/`.
+
+- Fil unifié (activités, tâches, changements d'étape) avec l'origine de chaque événement et des filtres ; il est
+  intégré aux fiches compte et opportunité.
+- Une activité liée à une opportunité ouverte met à jour sa prochaine action.
+- Toute tâche ouverte a un responsable ; les retards se calculent côté serveur à partir de l'échéance (un jour, UTC).
+- Les relances automatiques et le centre de notifications arrivent au sprint 4.5.
+- `npm run db:seed` crée en développement 6 activités et 4 tâches (dont une en retard) pour `commercial@crm.local`.
+
 ## Administration des utilisateurs (phase 4, sprint 4.1)
 
 Code dans `src/features/users/` (`service`, `teams`, `schemas`) et `src/app/(crm)/admin/`. Réservée au rôle

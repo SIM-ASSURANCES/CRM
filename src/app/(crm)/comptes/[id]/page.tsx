@@ -12,6 +12,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { ACCOUNT_SOURCES, COUNTRIES, labelOf } from "@/features/accounts/config";
 import { getAccount, listAccountOptions, type AccountDetail } from "@/features/accounts/service";
+import { FeedList } from "@/app/(crm)/activites/_components/feed-list";
+import { listFeed, type Feed } from "@/features/activities/service";
 import { listLinkableContacts } from "@/features/contacts/service";
 import { can } from "@/lib/auth/permissions";
 import { requirePermissionOrNotFound } from "@/lib/auth/session";
@@ -33,6 +35,10 @@ const FLASH: Record<string, string> = {
   linked: "Contact rattaché.",
   unlinked: "Contact détaché.",
   role_removed: "Rôle retiré.",
+  activity_added: "Activité enregistrée.",
+  activity_updated: "Activité modifiée.",
+  task_created: "Tâche créée.",
+  task_updated: "Tâche modifiée.",
 };
 
 export default function AccountPage({ params, searchParams }: Props) {
@@ -74,9 +80,13 @@ async function AccountContent({ params, searchParams }: Props) {
   const canWriteContacts = can(user.role, "contact:write") && !archived;
   const canMerge = can(user.role, "account:merge") && !archived;
 
-  const [mergeOptions, linkable] = await Promise.all([
+  const canSeeActivities = can(user.role, "activity:read");
+  const canLogActivity = can(user.role, "activity:write") && !archived;
+  const canAddTask = can(user.role, "task:write") && !archived;
+  const [mergeOptions, linkable, feed] = await Promise.all([
     canMerge ? listAccountOptions(user, { excludeIds: [id] }) : [],
     canWriteContacts ? listLinkableContacts(user, id) : [],
+    canSeeActivities ? listFeed(user, { accountId: id }) : (null as Feed | null),
   ]);
 
   const revenue =
@@ -271,6 +281,40 @@ async function AccountContent({ params, searchParams }: Props) {
           </div>
         )}
       </section>
+
+      {feed && (
+        <section aria-labelledby="activites" className="rounded-2xl border border-line bg-white p-6 md:p-8">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <h2 id="activites" className="text-lg font-semibold text-ink">Activités et tâches</h2>
+            <div className="flex flex-wrap gap-3">
+              {canLogActivity && (
+                <Link href={`/activites/nouveau?compte=${id}&retour=${encodeURIComponent(`/comptes/${id}`)}`} className={buttonClasses("secondary")}>
+                  Journaliser une activité
+                </Link>
+              )}
+              {canAddTask && (
+                <Link href={`/taches/nouveau?compte=${id}&retour=${encodeURIComponent(`/comptes/${id}`)}`} className={buttonClasses("secondary")}>
+                  Nouvelle tâche
+                </Link>
+              )}
+            </div>
+          </div>
+          <FeedList
+            items={feed.items.slice(0, 30)}
+            truncated={feed.truncated || feed.items.length > 30}
+            hideAccount
+            returnTo={`/comptes/${id}`}
+            emptyText="Aucune activité sur ce compte. Journalisez le premier échange."
+          />
+          {feed.items.length > 0 && (
+            <p className="mt-4 text-sm">
+              <Link href={`/activites?compte=${id}`} className="font-medium text-brand-700 hover:underline">
+                Voir le fil complet et le filtrer
+              </Link>
+            </p>
+          )}
+        </section>
+      )}
     </div>
   );
 }
