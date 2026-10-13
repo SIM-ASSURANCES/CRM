@@ -11,6 +11,9 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Les tests d'intégration partagent les mêmes tables et se nettoient avant chaque test : en parallèle, ils
+    // s'effaceraient mutuellement des données. Les fichiers s'exécutent donc l'un après l'autre (la suite reste rapide).
+    fileParallelism: false,
     include: ["tests/**/*.test.ts"],
     setupFiles: ["tests/setup.ts"],
   },

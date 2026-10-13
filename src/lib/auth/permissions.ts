@@ -10,12 +10,14 @@ export const PERMISSIONS = [
   "prospect:write",
   "account:read",
   "account:write",
-  // Changer le propriétaire commercial d'un compte (changement tracé, CDC 5.1).
+  // Changer le propriétaire commercial d'un compte ou d'une opportunité (changement tracé, CDC 5.1).
   "account:assign",
   // Fusionner des doublons : réservé aux profils autorisés, avec trace d'audit (CDC 3.2).
   "account:merge",
   "contact:read",
   "contact:write",
+  "opportunity:read",
+  "opportunity:write",
   "report:export",
   "user:manage",
   "audit:read",
@@ -36,6 +38,8 @@ const MATRIX: Record<Role, readonly Permission[]> = {
     "account:merge",
     "contact:read",
     "contact:write",
+    "opportunity:read",
+    "opportunity:write",
     "report:export",
   ],
   manager: [
@@ -47,6 +51,8 @@ const MATRIX: Record<Role, readonly Permission[]> = {
     "account:assign",
     "contact:read",
     "contact:write",
+    "opportunity:read",
+    "opportunity:write",
     "report:export",
   ],
   commercial: [
@@ -57,8 +63,10 @@ const MATRIX: Record<Role, readonly Permission[]> = {
     "account:write",
     "contact:read",
     "contact:write",
+    "opportunity:read",
+    "opportunity:write",
   ],
-  audit: ["dashboard:read", "prospect:read", "account:read", "contact:read", "audit:read"],
+  audit: ["dashboard:read", "prospect:read", "account:read", "contact:read", "opportunity:read", "audit:read"],
 };
 
 export function can(role: Role, permission: Permission): boolean {

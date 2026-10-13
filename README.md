@@ -110,6 +110,18 @@ Code dans `src/features/accounts/` (`config`, `schemas`, `rules` pures, `scope`,
 - La table des comptes s'appelle `accounts_crm` (le nom `accounts` est pris par les identifiants de Better Auth).
 - `npm run db:seed` crée en développement un groupe avec filiales, des clients et des contacts avec leurs rôles.
 
+## Opportunités et Kanban (phase 4, sprint 4.3)
+
+Code dans `src/features/opportunities/` (`config`, `schemas`, `rules` pures, `scope`, `service`, `conversion`),
+écrans dans `src/app/(crm)/opportunites/` et `src/app/(crm)/prospects/[id]/convertir/`.
+
+- Kanban par étape (10 à 90 %), glisser-déposer ou sélecteur au clavier ; chaque changement d'étape passe par une
+  confirmation (critère de sortie, contrat signé et premier paiement pour « gagnée », motif pour « perdue »).
+- Montants brut, pondéré et signé **calculés côté serveur** ; jamais acceptés du navigateur.
+- « Convertir » sur un prospect crée compte, contact et opportunité dans une seule transaction (doublons signalés,
+  rattachement possible à un compte existant) ; le prospect et son historique sont conservés.
+- `npm run db:seed` crée en développement 8 opportunités (une par étape ouverte, une gagnée, une perdue).
+
 ## Administration des utilisateurs (phase 4, sprint 4.1)
 
 Code dans `src/features/users/` (`service`, `teams`, `schemas`) et `src/app/(crm)/admin/`. Réservée au rôle

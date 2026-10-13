@@ -43,6 +43,10 @@ export type LeadDetail = LeadRow & {
   lossReason: string | null;
   lossComment: string | null;
   version: number;
+  /** Renseignés une fois le prospect converti en compte + contact + opportunité. */
+  convertedAt: Date | null;
+  convertedAccountId: string | null;
+  convertedOpportunityId: string | null;
 };
 
 export type DuplicateMatch = {
@@ -94,6 +98,9 @@ function toDetail(lead: LeadWithRelations): LeadDetail {
     lossReason: lead.lossReason,
     lossComment: lead.lossComment,
     version: lead.version,
+    convertedAt: lead.convertedAt,
+    convertedAccountId: lead.convertedAccountId,
+    convertedOpportunityId: lead.convertedOpportunityId,
   };
 }
 

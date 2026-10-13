@@ -73,6 +73,11 @@ describe.skipIf(!hasDb)("comptes et contacts (PostgreSQL)", () => {
   });
 
   beforeEach(async () => {
+    // Les opportunités et les conversions de prospects référencent comptes et contacts (clés étrangères restrictives).
+    await db.lead.updateMany({ data: { convertedAccountId: null, convertedContactId: null, convertedOpportunityId: null } });
+    await db.opportunityContact.deleteMany();
+    await db.opportunityEvent.deleteMany();
+    await db.opportunity.deleteMany();
     await db.contactRole.deleteMany();
     await db.accountContact.deleteMany();
     await db.contact.deleteMany();

@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { z } from "zod";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { LeadForm } from "@/app/(crm)/prospects/_components/lead-form";
 import { LostDialog } from "@/app/(crm)/prospects/_components/lost-dialog";
+import { buttonClasses } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { lossReasonLabel, stageLabel } from "@/features/leads/config";
 import { getLead, getThresholds, listActiveProducts, type LeadDetail } from "@/features/leads/service";
@@ -68,7 +70,19 @@ async function LeadContent({ params }: { params: Promise<{ id: string }> }) {
     throw error;
   }
 
+  const converted = Boolean(lead.convertedAt);
   const editable = lead.status === "open" && can(user.role, "prospect:write");
+  const convertible =
+    editable &&
+    !converted &&
+    can(user.role, "account:write") &&
+    can(user.role, "contact:write") &&
+    can(user.role, "opportunity:write");
+  const opportunityLink = lead.convertedOpportunityId && can(user.role, "opportunity:read") && (
+    <Link href={`/opportunites/${lead.convertedOpportunityId}`} className={buttonClasses("secondary")}>
+      Voir l&apos;opportunité
+    </Link>
+  );
 
   if (!editable) {
     return (
@@ -76,12 +90,15 @@ async function LeadContent({ params }: { params: Promise<{ id: string }> }) {
         <PageHeader
           title={lead.companyName}
           description={
-            lead.status === "won"
-              ? "Affaire gagnée : le prospect est clôturé."
-              : lead.status === "lost"
-                ? "Prospect perdu : clôturé."
-                : "Consultation en lecture seule."
+            converted
+              ? "Prospect converti en compte, contact et opportunité."
+              : lead.status === "won"
+                ? "Affaire gagnée : le prospect est clôturé."
+                : lead.status === "lost"
+                  ? "Prospect perdu : clôturé."
+                  : "Consultation en lecture seule."
           }
+          actions={opportunityLink || undefined}
         />
         <div className="rounded-2xl border border-line bg-white p-6 md:p-8">
           <ReadOnlySummary lead={lead} />
@@ -97,7 +114,17 @@ async function LeadContent({ params }: { params: Promise<{ id: string }> }) {
       <PageHeader
         title={lead.companyName}
         description="Modifiez les informations ou faites avancer le process de vente."
-        actions={<LostDialog leadId={lead.id} version={lead.version} companyName={lead.companyName} />}
+        actions={
+          <div className="flex flex-wrap items-center gap-3">
+            {opportunityLink}
+            {convertible && (
+              <Link href={`/prospects/${lead.id}/convertir`} className={buttonClasses("primary")}>
+                Convertir
+              </Link>
+            )}
+            <LostDialog leadId={lead.id} version={lead.version} companyName={lead.companyName} />
+          </div>
+        }
       />
       <div className="rounded-2xl border border-line bg-white p-6 md:p-8">
         <LeadForm

@@ -1,6 +1,7 @@
 import {
   Building2,
   ContactRound,
+  Handshake,
   KeyRound,
   LayoutDashboard,
   Percent,
@@ -52,6 +53,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/comptes", label: "Comptes", icon: Building2, permission: "account:read" },
       { href: "/contacts", label: "Contacts", icon: ContactRound, permission: "contact:read" },
+      { href: "/opportunites", label: "Opportunités", icon: Handshake, permission: "opportunity:read" },
     ],
   },
   {

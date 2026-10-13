@@ -269,6 +269,91 @@ async function seedDemoLeads(ownerEmail: string) {
   return DEMO_LEADS.length;
 }
 
+/** Opportunités de démonstration : une par étape ouverte, plus une gagnée et une perdue, rattachées aux comptes de démo. */
+async function seedDemoOpportunities(ownerEmail: string) {
+  const owner = await db.user.findUnique({ where: { email: ownerEmail }, select: { id: true } });
+  if (!owner || (await db.opportunity.count({ where: { ownerUserId: owner.id } })) > 0) return 0;
+
+  const accounts = await db.crmAccount.findMany({ where: { ownerUserId: owner.id }, select: { id: true, legalName: true } });
+  const accountId = (name: string) => accounts.find((a) => a.legalName === name)?.id;
+  const products = await db.product.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true } });
+  const inDays = (days: number) => new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate() + days));
+
+  const demo = [
+    { account: "Ouattara Agro", name: "Ouattara Agro – prévoyance collective", stage: 10, amount: 0, action: "Premier appel de découverte", actionIn: 2, closeIn: 90, product: 0 },
+    { account: "Imprimerie Centrale", name: "Imprimerie Centrale – santé groupe", stage: 20, amount: 0, action: "Planifier un rendez-vous", actionIn: 5, closeIn: 75, product: 1 },
+    { account: "Ouattara Transport", name: "Ouattara Transport – flotte automobile", stage: 40, amount: 8_500_000, action: "Envoyer le questionnaire de risque", actionIn: -3, closeIn: 45, product: 2 },
+    { account: "Clinique Sainte-Marie", name: "Clinique Sainte-Marie – responsabilité civile", stage: 60, amount: 4_200_000, action: "Présenter la proposition", actionIn: 4, closeIn: 30, product: 3 },
+    { account: "Groupe Ouattara Holding", name: "Groupe Ouattara – assurance groupe", stage: 80, amount: 25_000_000, action: "Négocier les conditions", actionIn: 1, closeIn: 20, product: 4 },
+    { account: "Ouattara Transport", name: "Ouattara Transport – marchandises transportées", stage: 90, amount: 6_000_000, action: "Préparer le contrat à signer", actionIn: 3, closeIn: 10, product: 0 },
+  ];
+
+  let count = 0;
+  for (const item of demo) {
+    const id = accountId(item.account);
+    if (!id) continue;
+    const productId = products[item.product % products.length]?.id ?? null;
+    await db.opportunity.create({
+      data: {
+        name: item.name,
+        accountId: id,
+        ownerUserId: owner.id,
+        // Au-delà du seuil de qualification, produit et montant sont obligatoires.
+        productId,
+        amount: item.amount,
+        revenuePeriod: "annual",
+        stage: item.stage,
+        expectedCloseDate: inDays(item.closeIn),
+        nextAction: item.action,
+        nextActionDate: inDays(item.actionIn),
+        events: { create: { actorUserId: owner.id, type: "created", toStage: item.stage, status: "open", amount: item.amount, expectedCloseDate: inDays(item.closeIn) } },
+      },
+    });
+    count += 1;
+  }
+
+  const closedId = accountId("Clinique Sainte-Marie");
+  if (closedId) {
+    const closedAt = new Date(Date.now() - 12 * 86_400_000);
+    await db.opportunity.create({
+      data: {
+        name: "Clinique Sainte-Marie – santé du personnel",
+        accountId: closedId,
+        ownerUserId: owner.id,
+        productId: products[1]?.id ?? null,
+        amount: 9_800_000,
+        revenuePeriod: "annual",
+        stage: 100,
+        status: "won",
+        closedAt,
+        events: { create: { actorUserId: owner.id, type: "won", fromStage: 90, toStage: 100, status: "won", amount: 9_800_000, occurredAt: closedAt } },
+      },
+    });
+    count += 1;
+  }
+  const lostId = accountId("Ouattara Agro");
+  if (lostId) {
+    const closedAt = new Date(Date.now() - 20 * 86_400_000);
+    await db.opportunity.create({
+      data: {
+        name: "Ouattara Agro – assurance récolte",
+        accountId: lostId,
+        ownerUserId: owner.id,
+        productId: products[2]?.id ?? null,
+        amount: 3_000_000,
+        revenuePeriod: "annual",
+        stage: 40,
+        status: "lost",
+        lossReason: "price",
+        closedAt,
+        events: { create: { actorUserId: owner.id, type: "lost", fromStage: 40, toStage: 40, status: "lost", amount: 3_000_000, occurredAt: closedAt } },
+      },
+    });
+    count += 1;
+  }
+  return count;
+}
+
 async function main() {
   const parsed = schema.safeParse(process.env);
   if (!parsed.success) {
@@ -315,6 +400,9 @@ async function main() {
 
     const leads = await seedDemoLeads("commercial@crm.local");
     console.log(`Prospects de démonstration : ${leads} créé(s) pour commercial@crm.local.`);
+
+    const opportunities = await seedDemoOpportunities("commercial@crm.local");
+    console.log(`Opportunités de démonstration : ${opportunities} créée(s) pour commercial@crm.local.`);
   }
 }
 

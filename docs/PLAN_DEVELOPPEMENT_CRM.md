@@ -602,6 +602,25 @@ Durées indicatives pour une équipe de 3 à 4 personnes (1 lead full-stack, 1�
 
 **Limites connues** : l'identifiant légal n'est pas validé par format de pays (liste « Pays et identifiants » à arbitrer, section 12, question 8) ; la détection de doublons sur la raison sociale est insensible à la casse mais pas aux accents (extension PostgreSQL `unaccent` à prévoir) ; la fusion des contacts en double n'est pas implémentée (seulement celle des comptes) ; les listes de choix (compte parent, contact à associer) sont limitées à 500 et 300 entrées ; les opportunités, activités et documents du compte arriveront aux sprints 4.3 et 4.4 (la vue groupe les agrégera alors) ; la conversion d'un prospect en compte + contact (CDC A.8) est prévue au sprint 4.3.
 
+### Phase 4, sprint 4.3 — Opportunités et Kanban : réalisée à 13/10/2026 (code dans `crm/src/features/opportunities/` et `crm/src/app/(crm)/opportunites/`)
+
+| Élément du plan | État | Détail |
+|---|---|---|
+| Modèle d'opportunité (CDC 5.1) | Fait | Compte, propriétaire, produit, montant, période de revenu, méthode d'estimation, étape, statut, clôture prévisionnelle, prochaine action et sa date, concurrent, solution actuelle, motif de perte ; contacts impliqués avec rôle et contact principal unique ; historique `opportunity_events` |
+| Kanban (CDC 5.2) | Fait | Une colonne par étape ouverte (10, 20, 40, 60, 80, 90 %), totaux brut et pondéré par colonne, cartes avec alerte de retard ; glisser-déposer **et** sélecteur accessible au clavier ; zones « gagnée » et « perdue » ; vue liste paginée ; filtres recherche, produit, propriétaire |
+| Changement d'étape | Fait | Boîte de confirmation avec critère de sortie de l'étape visée ; produit et montant obligatoires au-delà du seuil de qualification ; reculer permis (tracé) ; **le serveur refuse sans confirmation** (vérifié dans le navigateur) |
+| Clôture gagnée / perdue | Fait | Gagnée : contrat signé + premier paiement confirmés ; perdue : motif obligatoire (commentaire exigé pour « Autre ») ; une opportunité clôturée est en lecture seule |
+| Montants (CDC 5.3) | Fait | Brut, pondéré (montant × probabilité de l'étape) et signé (gagnées de l'année) **calculés côté serveur** ; vérifiés sur les données de démonstration (43,7 M brut, 31,32 M pondéré) |
+| Conversion prospect → compte + contact + opportunité (CDC A.8) | Fait | Transaction atomique ; alerte de doublon avant création, rattachement possible à un compte existant ; contact réutilisé s'il existe ; le prospect est conservé et renvoie vers l'opportunité ; double conversion refusée |
+| Contraintes en base | Fait | Étapes autorisées, gagnée ⇔ étape 100, perdue ⇒ motif, montant ≥ 0, ouverte ⇒ clôture prévue + prochaine action + date, un seul contact principal |
+| Périmètre et permissions | Fait | `opportunity:read` / `opportunity:write` ; audit en lecture seule ; hors périmètre ⇒ « introuvable » ; réaffectation réservée à `account:assign` |
+| Audit | Fait | `opportunity.created/updated/stage_changed/won/lost/contact_added/contact_removed`, `lead.converted` |
+| Tests | Fait | 261 tests (dont 28 d'intégration pour les opportunités), lint et `tsc` propres, build réussi |
+
+**Défaut trouvé par les tests** : un montant laissé vide était accepté comme 0 (`z.coerce.number` convertit `""` en 0) ; il est désormais refusé comme absent.
+
+**Limites connues** : les étapes sont des constantes (pas de table `pipeline_stages` configurable) ; les contacts d'opportunité ne sont pas reliés aux rôles d'achat par produit (`contact_roles`) ; la définition comptable du revenu (prime, commission, honoraires) n'est pas tranchée (section 12, question 6) ; la conversion et le glisser-déposer n'ont pas de test de bout en bout (Playwright) : la conversion est couverte par les tests d'intégration, le Kanban a été vérifié à la main via le sélecteur ; la fusion de contacts en double n'est pas implémentée ; le Kanban est limité à 500 opportunités ouvertes.
+
 ---
 
 ## Annexe — Parcours Excel : synthèse des écrans à construire

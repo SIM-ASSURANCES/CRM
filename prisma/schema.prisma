@@ -33,16 +33,18 @@ model User {
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  team          Team?                  @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
-  managedTeams  Team[]                 @relation("TeamManager")
-  sessions      Session[]
-  accounts      Account[]
-  auditLogs     AuditLog[]
-  resetRequests PasswordResetRequest[] @relation("ResetHandledBy")
-  leads         Lead[]                 @relation("LeadOwner")
-  leadEvents    LeadEvent[]
-  accountsOwned CrmAccount[]              @relation("AccountOwner")
-  contactsOwned Contact[]              @relation("ContactOwner")
+  team               Team?                  @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
+  managedTeams       Team[]                 @relation("TeamManager")
+  sessions           Session[]
+  accounts           Account[]
+  auditLogs          AuditLog[]
+  resetRequests      PasswordResetRequest[] @relation("ResetHandledBy")
+  leads              Lead[]                 @relation("LeadOwner")
+  leadEvents         LeadEvent[]
+  accountsOwned      CrmAccount[]           @relation("AccountOwner")
+  contactsOwned      Contact[]              @relation("ContactOwner")
+  opportunitiesOwned Opportunity[]          @relation("OpportunityOwner")
+  opportunityEvents  OpportunityEvent[]
 
   @@index([teamId])
   @@index([role])
@@ -183,8 +185,9 @@ model Product {
   sortOrder Int      @default(0) @map("sort_order")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  leads        Lead[]
-  contactRoles ContactRole[]
+  leads         Lead[]
+  contactRoles  ContactRole[]
+  opportunities Opportunity[]
 
   @@map("products")
 }
@@ -192,36 +195,45 @@ model Product {
 // Un prospect = une ligne unique. Les « onglets » de reporting (prospects, qualifiés, propositions, pipeline,
 // gagnés) sont des VUES filtrées sur `progress` et `status` : aucune donnée n'est copiée d'un écran à l'autre.
 model Lead {
-  id               String    @id @default(uuid(7)) @db.Uuid
-  companyName      String    @map("company_name")
-  sector           String
-  contactLastName  String    @map("contact_last_name")
-  contactFirstName String    @map("contact_first_name")
-  phone            String
-  email            String
-  jobTitle         String    @map("job_title")
+  id                     String    @id @default(uuid(7)) @db.Uuid
+  companyName            String    @map("company_name")
+  sector                 String
+  contactLastName        String    @map("contact_last_name")
+  contactFirstName       String    @map("contact_first_name")
+  phone                  String
+  email                  String
+  jobTitle               String    @map("job_title")
   // Date d'insertion saisie par l'utilisateur ; ne peut pas être postérieure à aujourd'hui (contrainte CHECK).
-  insertedOn       DateTime  @map("inserted_on") @db.Date
+  insertedOn             DateTime  @map("inserted_on") @db.Date
   // « Process de vente » en pourcentage d'avancement : 10, 20, 40, 60, 80, 90 ou 100 (contrainte CHECK).
-  progress         Int       @default(10)
+  progress               Int       @default(10)
   // open | won | lost
-  status           String    @default("open")
-  productId        String?   @map("product_id") @db.Uuid
+  status                 String    @default("open")
+  productId              String?   @map("product_id") @db.Uuid
   // Valeur de l'offre commerciale en FCFA (définition du revenu à confirmer : plan, section 12, question 6).
-  expectedRevenue  Decimal?  @map("expected_revenue") @db.Decimal(18, 2)
-  currency         String    @default("XOF")
-  lossReason       String?   @map("loss_reason")
-  lossComment      String?   @map("loss_comment")
-  closedAt         DateTime? @map("closed_at") @db.Timestamptz(3)
-  ownerUserId      String    @map("owner_user_id") @db.Uuid
+  expectedRevenue        Decimal?  @map("expected_revenue") @db.Decimal(18, 2)
+  currency               String    @default("XOF")
+  lossReason             String?   @map("loss_reason")
+  lossComment            String?   @map("loss_comment")
+  closedAt               DateTime? @map("closed_at") @db.Timestamptz(3)
+  // Conversion en compte + contact + opportunité (CDC A.8) : le prospect et son historique sont conservés.
+  convertedAt            DateTime? @map("converted_at") @db.Timestamptz(3)
+  convertedAccountId     String?   @map("converted_account_id") @db.Uuid
+  convertedContactId     String?   @map("converted_contact_id") @db.Uuid
+  convertedOpportunityId String?   @unique @map("converted_opportunity_id") @db.Uuid
+  ownerUserId            String    @map("owner_user_id") @db.Uuid
   // Concurrence optimiste : une modification sur une version périmée est refusée (409).
-  version          Int       @default(1)
-  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  version                Int       @default(1)
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   owner   User        @relation("LeadOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
   product Product?    @relation(fields: [productId], references: [id], onDelete: Restrict)
   events  LeadEvent[]
+
+  convertedAccount     CrmAccount?  @relation("LeadConvertedAccount", fields: [convertedAccountId], references: [id], onDelete: Restrict)
+  convertedContact     Contact?     @relation("LeadConvertedContact", fields: [convertedContactId], references: [id], onDelete: Restrict)
+  convertedOpportunity Opportunity? @relation("LeadConvertedOpportunity", fields: [convertedOpportunityId], references: [id], onDelete: Restrict)
 
   @@index([ownerUserId, status, progress])
   @@index([status, progress])
@@ -290,12 +302,14 @@ model CrmAccount {
   createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  parent   CrmAccount?  @relation("AccountHierarchy", fields: [parentAccountId], references: [id], onDelete: Restrict)
-  children CrmAccount[] @relation("AccountHierarchy")
-  merged   CrmAccount?  @relation("AccountMerge", fields: [mergedIntoId], references: [id], onDelete: Restrict)
-  mergedIn CrmAccount[] @relation("AccountMerge")
-  owner    User      @relation("AccountOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
-  contacts AccountContact[]
+  parent         CrmAccount?      @relation("AccountHierarchy", fields: [parentAccountId], references: [id], onDelete: Restrict)
+  children       CrmAccount[]     @relation("AccountHierarchy")
+  merged         CrmAccount?      @relation("AccountMerge", fields: [mergedIntoId], references: [id], onDelete: Restrict)
+  mergedIn       CrmAccount[]     @relation("AccountMerge")
+  owner          User             @relation("AccountOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  contacts       AccountContact[]
+  opportunities  Opportunity[]
+  convertedLeads Lead[]           @relation("LeadConvertedAccount")
 
   @@index([ownerUserId, status])
   @@index([parentAccountId])
@@ -325,8 +339,10 @@ model Contact {
   createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  owner    User             @relation("ContactOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
-  accounts AccountContact[]
+  owner          User                 @relation("ContactOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  accounts       AccountContact[]
+  opportunities  OpportunityContact[]
+  convertedLeads Lead[]               @relation("LeadConvertedContact")
 
   @@index([ownerUserId])
   @@index([email])
@@ -345,7 +361,7 @@ model AccountContact {
   endDate           DateTime? @map("end_date") @db.Date
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  account CrmAccount       @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  account CrmAccount    @relation(fields: [accountId], references: [id], onDelete: Restrict)
   contact Contact       @relation(fields: [contactId], references: [id], onDelete: Restrict)
   roles   ContactRole[]
 
@@ -373,4 +389,91 @@ model ContactRole {
 
   @@index([accountId, contactId])
   @@map("contact_roles")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4.3 : opportunités et pipeline (CDC sections 5.1 à 5.4 et A.5)
+// ---------------------------------------------------------------------------
+
+// Une opportunité = une affaire commerciale chez un compte. Le montant PONDÉRÉ n'est jamais stocké : il est calculé
+// côté serveur (montant × probabilité de l'étape). L'étape est un pourcentage d'avancement (10, 20, 40, 60, 80, 90) ;
+// 100 % = gagné. Même échelle que les prospects (Excel et CDC 5.2).
+model Opportunity {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  name              String
+  accountId         String    @map("account_id") @db.Uuid
+  ownerUserId       String    @map("owner_user_id") @db.Uuid
+  productId         String?   @map("product_id") @db.Uuid
+  amount            Decimal   @default(0) @db.Decimal(18, 2)
+  currency          String    @default("XOF")
+  // Période de revenu du montant : one_time | monthly | annual (la définition du revenu reste à confirmer, plan §12).
+  revenuePeriod     String    @default("annual") @map("revenue_period")
+  estimationMethod  String?   @map("estimation_method")
+  stage             Int       @default(10)
+  // open | won | lost
+  status            String    @default("open")
+  expectedCloseDate DateTime? @map("expected_close_date") @db.Date
+  // Prochaine action datée : obligatoire tant que l'opportunité est ouverte (CDC 5.1 et 14).
+  nextAction        String?   @map("next_action")
+  nextActionDate    DateTime? @map("next_action_date") @db.Date
+  competitor        String?
+  currentSolution   String?   @map("current_solution")
+  lossReason        String?   @map("loss_reason")
+  lossComment       String?   @map("loss_comment")
+  closedAt          DateTime? @map("closed_at") @db.Timestamptz(3)
+  version           Int       @default(1)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  account       CrmAccount           @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  owner         User                 @relation("OpportunityOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  product       Product?             @relation(fields: [productId], references: [id], onDelete: Restrict)
+  contacts      OpportunityContact[]
+  events        OpportunityEvent[]
+  convertedFrom Lead[]               @relation("LeadConvertedOpportunity")
+
+  @@index([ownerUserId, status, stage])
+  @@index([accountId])
+  @@index([status, expectedCloseDate])
+  @@map("opportunities")
+}
+
+// Contacts impliqués dans l'opportunité, avec leur rôle dans CE dossier (CDC 5.1).
+model OpportunityContact {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  opportunityId String   @map("opportunity_id") @db.Uuid
+  contactId     String   @map("contact_id") @db.Uuid
+  // decision_maker | validator | buyer | prescriber | user | other
+  roleType      String?  @map("role_type")
+  isMain        Boolean  @default(false) @map("is_main")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  contact     Contact     @relation(fields: [contactId], references: [id], onDelete: Restrict)
+
+  @@unique([opportunityId, contactId])
+  @@index([contactId])
+  @@map("opportunity_contacts")
+}
+
+// Historique daté des changements d'étape, de montant et de date de clôture : il explique les variations du forecast.
+model OpportunityEvent {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  opportunityId     String    @map("opportunity_id") @db.Uuid
+  occurredAt        DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  actorUserId       String?   @map("actor_user_id") @db.Uuid
+  // created | stage_changed | updated | won | lost
+  type              String
+  fromStage         Int?      @map("from_stage")
+  toStage           Int       @map("to_stage")
+  status            String
+  amount            Decimal   @db.Decimal(18, 2)
+  expectedCloseDate DateTime? @map("expected_close_date") @db.Date
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+  actor       User?       @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([opportunityId, occurredAt])
+  @@index([occurredAt, type])
+  @@map("opportunity_events")
 }
