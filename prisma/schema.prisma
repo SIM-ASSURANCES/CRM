@@ -1,0 +1,376 @@
+// Schéma du socle technique (phase 2). Les tables métier (prospects, opportunités…)
+// seront ajoutées par migrations successives dans les phases 3 et 4.
+// Conventions (CDC A.5) : UUID, timestamptz, tables en snake_case, pas de cascade sur l'historique.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Identité et accès (tables gérées par Better Auth : user, session, account, verification)
+// ---------------------------------------------------------------------------
+
+model User {
+  id                 String    @id @default(uuid(7)) @db.Uuid
+  name               String
+  email              String    @unique
+  emailVerified      Boolean   @default(false) @map("email_verified")
+  image              String?
+  // Rôle applicatif : admin | direction | manager | commercial | audit (voir src/lib/auth/roles.ts)
+  role               String?   @default("commercial")
+  banned             Boolean?  @default(false)
+  banReason          String?   @map("ban_reason")
+  banExpires         DateTime? @map("ban_expires") @db.Timestamptz(3)
+  // Réinitialisation par l'administrateur : le mot de passe temporaire doit être changé à la connexion suivante
+  mustChangePassword Boolean   @default(false) @map("must_change_password")
+  teamId             String?   @map("team_id") @db.Uuid
+  lastLoginAt        DateTime? @map("last_login_at") @db.Timestamptz(3)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  team          Team?                  @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
+  managedTeams  Team[]                 @relation("TeamManager")
+  sessions      Session[]
+  accounts      Account[]
+  auditLogs     AuditLog[]
+  resetRequests PasswordResetRequest[] @relation("ResetHandledBy")
+  leads         Lead[]                 @relation("LeadOwner")
+  leadEvents    LeadEvent[]
+  accountsOwned CrmAccount[]              @relation("AccountOwner")
+  contactsOwned Contact[]              @relation("ContactOwner")
+
+  @@index([teamId])
+  @@index([role])
+  @@map("users")
+}
+
+model Session {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  expiresAt      DateTime @map("expires_at") @db.Timestamptz(3)
+  token          String   @unique
+  ipAddress      String?  @map("ip_address")
+  userAgent      String?  @map("user_agent")
+  impersonatedBy String?  @map("impersonated_by")
+  userId         String   @map("user_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Account {
+  id                    String    @id @default(uuid(7)) @db.Uuid
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  userId                String    @map("user_id") @db.Uuid
+  accessToken           String?   @map("access_token")
+  refreshToken          String?   @map("refresh_token")
+  idToken               String?   @map("id_token")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at") @db.Timestamptz(3)
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at") @db.Timestamptz(3)
+  scope                 String?
+  // Haché par Better Auth (scrypt) : jamais en clair
+  password              String?
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Verification {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([identifier])
+  @@map("verifications")
+}
+
+model Team {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  name          String   @unique
+  managerUserId String?  @map("manager_user_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  manager User?  @relation("TeamManager", fields: [managerUserId], references: [id], onDelete: SetNull)
+  members User[] @relation("TeamMembers")
+
+  @@index([managerUserId])
+  @@map("teams")
+}
+
+// ---------------------------------------------------------------------------
+// Traçabilité et paramétrage
+// ---------------------------------------------------------------------------
+
+// Journal d'audit en ajout seul : un trigger PostgreSQL interdit UPDATE et DELETE (voir la migration).
+model AuditLog {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  // null = action du système (jobs, automatisations)
+  actorUserId String?  @map("actor_user_id") @db.Uuid
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id")
+  occurredAt  DateTime @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  requestId   String?  @map("request_id")
+  ipAddress   String?  @map("ip_address")
+  // Métadonnées autorisées uniquement : jamais de mot de passe, jeton ou donnée sensible
+  metadata    Json?
+
+  // Restrict : un utilisateur ayant des traces d'audit ne peut pas être supprimé (on le désactive).
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([entityType, entityId, occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@index([action, occurredAt])
+  @@map("audit_logs")
+}
+
+// Paramètres applicatifs modifiables par l'administrateur (seuils de bascule, délais d'alerte…).
+model Setting {
+  key       String   @id
+  value     Json
+  updatedBy String?  @map("updated_by") @db.Uuid
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("settings")
+}
+
+// Demandes de réinitialisation saisies depuis la page de connexion et traitées par un administrateur.
+// L'e-mail n'est volontairement PAS une clé étrangère : la réponse publique est identique que le compte existe ou non.
+model PasswordResetRequest {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  email       String
+  status      String    @default("pending") // pending | done | rejected
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  handledById String?   @map("handled_by_id") @db.Uuid
+  handledAt   DateTime? @map("handled_at") @db.Timestamptz(3)
+
+  handledBy User? @relation("ResetHandledBy", fields: [handledById], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([email])
+  @@map("password_reset_requests")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3 : prospects (parcours Excel) — voir plan, sections 4 et 5
+// ---------------------------------------------------------------------------
+
+// Produits proposés (liste administrable ; valeurs initiales à valider par le métier).
+model Product {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  code      String   @unique
+  label     String
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  leads        Lead[]
+  contactRoles ContactRole[]
+
+  @@map("products")
+}
+
+// Un prospect = une ligne unique. Les « onglets » de reporting (prospects, qualifiés, propositions, pipeline,
+// gagnés) sont des VUES filtrées sur `progress` et `status` : aucune donnée n'est copiée d'un écran à l'autre.
+model Lead {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  companyName      String    @map("company_name")
+  sector           String
+  contactLastName  String    @map("contact_last_name")
+  contactFirstName String    @map("contact_first_name")
+  phone            String
+  email            String
+  jobTitle         String    @map("job_title")
+  // Date d'insertion saisie par l'utilisateur ; ne peut pas être postérieure à aujourd'hui (contrainte CHECK).
+  insertedOn       DateTime  @map("inserted_on") @db.Date
+  // « Process de vente » en pourcentage d'avancement : 10, 20, 40, 60, 80, 90 ou 100 (contrainte CHECK).
+  progress         Int       @default(10)
+  // open | won | lost
+  status           String    @default("open")
+  productId        String?   @map("product_id") @db.Uuid
+  // Valeur de l'offre commerciale en FCFA (définition du revenu à confirmer : plan, section 12, question 6).
+  expectedRevenue  Decimal?  @map("expected_revenue") @db.Decimal(18, 2)
+  currency         String    @default("XOF")
+  lossReason       String?   @map("loss_reason")
+  lossComment      String?   @map("loss_comment")
+  closedAt         DateTime? @map("closed_at") @db.Timestamptz(3)
+  ownerUserId      String    @map("owner_user_id") @db.Uuid
+  // Concurrence optimiste : une modification sur une version périmée est refusée (409).
+  version          Int       @default(1)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  owner   User        @relation("LeadOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  product Product?    @relation(fields: [productId], references: [id], onDelete: Restrict)
+  events  LeadEvent[]
+
+  @@index([ownerUserId, status, progress])
+  @@index([status, progress])
+  @@index([insertedOn])
+  @@index([email])
+  @@map("leads")
+}
+
+// Historique des changements : instantané daté de l'étape, du statut et du montant.
+// Alimente les KPI « vs semaine dernière » et la valeur du pipeline reconstituée à une date donnée.
+model LeadEvent {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  leadId          String   @map("lead_id") @db.Uuid
+  occurredAt      DateTime @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  actorUserId     String?  @map("actor_user_id") @db.Uuid
+  // created | progress_changed | updated | won | lost
+  type            String
+  fromProgress    Int?     @map("from_progress")
+  toProgress      Int      @map("to_progress")
+  status          String
+  expectedRevenue Decimal? @map("expected_revenue") @db.Decimal(18, 2)
+
+  lead  Lead  @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([leadId, occurredAt])
+  @@index([occurredAt, type])
+  @@map("lead_events")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4.2 : comptes et contacts (CDC sections 3.1 à 3.3 et A.5)
+// ---------------------------------------------------------------------------
+
+// Fiche entreprise. Un compte peut avoir un compte parent (groupe) et plusieurs filiales ; la hiérarchie ne doit
+// jamais former de cycle (vérifié par le service). Les comptes fusionnés sont archivés, jamais supprimés.
+model CrmAccount {
+  id                  String    @id @default(uuid(7)) @db.Uuid
+  legalName           String    @map("legal_name")
+  tradeName           String?   @map("trade_name")
+  // RCCM, numéro de compte contribuable ou équivalent local ; unique par pays parmi les comptes non archivés.
+  legalIdentifier     String?   @map("legal_identifier")
+  sector              String?
+  employeeCount       Int?      @map("employee_count")
+  // Chiffre d'affaires : montant + devise + année de référence, avec sa source (CDC 3.1).
+  revenueAmount       Decimal?  @map("revenue_amount") @db.Decimal(18, 2)
+  revenueCurrency     String    @default("XOF") @map("revenue_currency")
+  revenueYear         Int?      @map("revenue_year")
+  revenueSource       String?   @map("revenue_source")
+  collectiveAgreement String?   @map("collective_agreement")
+  // prospect | client | inactive | partner
+  status              String    @default("prospect")
+  // Source d'acquisition : event | referral | campaign | prospecting | other
+  source              String?
+  phone               String?
+  // Domaine de messagerie de l'entreprise (« client.ci ») : sert à détecter les doublons et à rattacher les e-mails.
+  emailDomain         String?   @map("email_domain")
+  addressLine         String?   @map("address_line")
+  city                String?
+  country             String    @default("CI")
+  parentAccountId     String?   @map("parent_account_id") @db.Uuid
+  ownerUserId         String    @map("owner_user_id") @db.Uuid
+  archivedAt          DateTime? @map("archived_at") @db.Timestamptz(3)
+  mergedIntoId        String?   @map("merged_into_id") @db.Uuid
+  version             Int       @default(1)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  parent   CrmAccount?  @relation("AccountHierarchy", fields: [parentAccountId], references: [id], onDelete: Restrict)
+  children CrmAccount[] @relation("AccountHierarchy")
+  merged   CrmAccount?  @relation("AccountMerge", fields: [mergedIntoId], references: [id], onDelete: Restrict)
+  mergedIn CrmAccount[] @relation("AccountMerge")
+  owner    User      @relation("AccountOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  contacts AccountContact[]
+
+  @@index([ownerUserId, status])
+  @@index([parentAccountId])
+  @@index([legalName])
+  @@index([emailDomain])
+  @@map("accounts_crm")
+}
+
+// Personne de contact. Elle peut être rattachée à plusieurs comptes (AccountContact).
+model Contact {
+  id                  String    @id @default(uuid(7)) @db.Uuid
+  firstName           String    @map("first_name")
+  lastName            String    @map("last_name")
+  jobTitle            String?   @map("job_title")
+  department          String?
+  email               String?
+  phone               String?
+  // active | to_confirm | left
+  status              String    @default("active")
+  // Canal privilégié : email | phone | whatsapp | in_person
+  preferredChannel    String?   @map("preferred_channel")
+  // Disponibilités et restrictions de contact (CDC 3.3).
+  contactRestrictions String?   @map("contact_restrictions")
+  ownerUserId         String    @map("owner_user_id") @db.Uuid
+  archivedAt          DateTime? @map("archived_at") @db.Timestamptz(3)
+  version             Int       @default(1)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  owner    User             @relation("ContactOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  accounts AccountContact[]
+
+  @@index([ownerUserId])
+  @@index([email])
+  @@index([lastName, firstName])
+  @@map("contacts")
+}
+
+// Rattachement d'un contact à un compte (N-N). Un seul contact principal par compte (index partiel en base).
+model AccountContact {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  accountId         String    @map("account_id") @db.Uuid
+  contactId         String    @map("contact_id") @db.Uuid
+  relationshipTitle String?   @map("relationship_title")
+  isPrimary         Boolean   @default(false) @map("is_primary")
+  startDate         DateTime? @map("start_date") @db.Date
+  endDate           DateTime? @map("end_date") @db.Date
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  account CrmAccount       @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  contact Contact       @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  roles   ContactRole[]
+
+  @@unique([accountId, contactId])
+  @@index([contactId])
+  @@map("account_contacts")
+}
+
+// Rôle d'achat d'un contact chez un compte, éventuellement pour un produit précis (CDC 3.3 : « le rôle d'un contact
+// doit être qualifié par famille de produits »). Le rattachement à une opportunité s'ajoutera au sprint 4.3.
+model ContactRole {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  accountId String   @map("account_id") @db.Uuid
+  contactId String   @map("contact_id") @db.Uuid
+  // decision_maker | validator | buyer | prescriber | user | other
+  roleType  String   @map("role_type")
+  productId String?  @map("product_id") @db.Uuid
+  // high | medium | low
+  influence String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  // Un rôle n'existe que pour un contact réellement rattaché au compte ; il disparaît avec le rattachement.
+  link    AccountContact @relation(fields: [accountId, contactId], references: [accountId, contactId], onDelete: Cascade)
+  product Product?       @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, contactId])
+  @@map("contact_roles")
+}

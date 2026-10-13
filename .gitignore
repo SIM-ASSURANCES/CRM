@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# le modèle d'environnement doit rester versionné
+!.env.example
+
+# client Prisma généré
+/src/generated
+
+# configuration locale de l'outil d'aperçu (propre à chaque poste)
+/.claude
