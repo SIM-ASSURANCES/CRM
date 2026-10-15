@@ -26,6 +26,10 @@ export const PERMISSIONS = [
   "report:export",
   "user:manage",
   "audit:read",
+  // Exporter le journal d'audit (chaque export est lui-même journalisé, CDC 8.3).
+  "audit:export",
+  // Importer des données initiales (comptes, contacts) depuis un fichier CSV ou XLSX.
+  "import:run",
   "settings:manage",
 ] as const;
 
@@ -83,7 +87,17 @@ const MATRIX: Record<Role, readonly Permission[]> = {
     "task:read",
     "task:write",
   ],
-  audit: ["dashboard:read", "prospect:read", "account:read", "contact:read", "opportunity:read", "activity:read", "task:read", "audit:read"],
+  audit: [
+    "dashboard:read",
+    "prospect:read",
+    "account:read",
+    "contact:read",
+    "opportunity:read",
+    "activity:read",
+    "task:read",
+    "audit:read",
+    "audit:export",
+  ],
 };
 
 export function can(role: Role, permission: Permission): boolean {

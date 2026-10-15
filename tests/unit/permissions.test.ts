@@ -66,6 +66,24 @@ describe("permissions", () => {
     }
   });
 
+  it("réserve l'import de données à l'administrateur", () => {
+    expect(can("admin", "import:run")).toBe(true);
+    for (const role of ["direction", "manager", "commercial", "audit"] as const) {
+      expect(can(role, "import:run")).toBe(false);
+    }
+  });
+
+  it("autorise l'audit et l'administrateur à consulter et exporter le journal, et personne d'autre", () => {
+    for (const role of ["admin", "audit"] as const) {
+      expect(can(role, "audit:read")).toBe(true);
+      expect(can(role, "audit:export")).toBe(true);
+    }
+    for (const role of ["direction", "manager", "commercial"] as const) {
+      expect(can(role, "audit:read")).toBe(false);
+      expect(can(role, "audit:export")).toBe(false);
+    }
+  });
+
   it("réserve la fusion de doublons à la direction et à l'administrateur (CDC 3.2)", () => {
     expect(can("admin", "account:merge")).toBe(true);
     expect(can("direction", "account:merge")).toBe(true);

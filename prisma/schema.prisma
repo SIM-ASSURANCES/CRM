@@ -49,6 +49,7 @@ model User {
   tasksAssigned      Task[]                 @relation("TaskAssignee")
   tasksCreated       Task[]                 @relation("TaskCreator")
   notifications      Notification[]
+  importBatches      ImportBatch[]          @relation("ImportCreator")
 
   @@index([teamId])
   @@index([role])
@@ -616,4 +617,62 @@ model Notification {
   @@unique([userId, dedupeKey])
   @@index([userId, readAt, createdAt])
   @@map("notifications")
+}
+
+// Import initial de données (CDC 11 et 14) : un lot = un fichier déposé, avec son mapping, son rapport de qualité et
+// ses lignes. Rien n'est écrit dans les comptes ou contacts avant la confirmation explicite de l'administrateur.
+model ImportBatch {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  // accounts | contacts
+  entity          String
+  filename        String
+  // uploaded | analyzed | importing | imported | cancelled
+  status          String    @default("uploaded")
+  // En-têtes du fichier, dans l'ordre des colonnes.
+  headers         Json
+  // Champ du CRM → nom de la colonne du fichier.
+  mapping         Json?
+  // Valeurs par défaut (responsable, secteur, statut, pays…).
+  defaults        Json?
+  // Rapport de qualité : rejets, doublons, champs manquants.
+  report          Json?
+  totalRows       Int       @map("total_rows")
+  validRows       Int       @default(0) @map("valid_rows")
+  rejectedRows    Int       @default(0) @map("rejected_rows")
+  duplicateRows   Int       @default(0) @map("duplicate_rows")
+  importedRows    Int       @default(0) @map("imported_rows")
+  createdByUserId String    @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  analyzedAt      DateTime? @map("analyzed_at") @db.Timestamptz(3)
+  importedAt      DateTime? @map("imported_at") @db.Timestamptz(3)
+
+  creator User        @relation("ImportCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  rows    ImportRow[]
+
+  @@index([createdAt])
+  @@map("import_batches")
+}
+
+model ImportRow {
+  id              String  @id @default(uuid(7)) @db.Uuid
+  batchId         String  @map("batch_id") @db.Uuid
+  // Numéro de la ligne dans le fichier (l'en-tête est la ligne 1).
+  rowNumber       Int     @map("row_number")
+  // Cellules d'origine, alignées sur les en-têtes. Vidé une fois la ligne importée (minimisation des données).
+  raw             Json
+  // pending | valid | rejected | duplicate | imported
+  status          String  @default("pending")
+  // Valeurs normalisées prêtes à être importées.
+  parsed          Json?
+  // Motifs de rejet (liste de messages).
+  errors          Json?
+  duplicateOf     String? @map("duplicate_of")
+  // Compte ou contact créé par cette ligne : traçabilité de l'import.
+  createdEntityId String? @map("created_entity_id") @db.Uuid
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, rowNumber])
+  @@index([batchId, status])
+  @@map("import_rows")
 }

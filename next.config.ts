@@ -24,6 +24,8 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Modules Node natifs ou utilisant des workers : non empaquetés par le bundler.
   serverExternalPackages: ["pino", "pg"],
+  // Dépôt des fichiers d'import (5 Mo au maximum, vérifié par le serveur) + 1 Mo pour l'enveloppe multipart.
+  experimental: { serverActions: { bodySizeLimit: "6mb" } },
   turbopack: {
     rules: {
       "*.css": {

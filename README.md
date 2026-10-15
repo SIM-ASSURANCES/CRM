@@ -147,6 +147,18 @@ Code dans `src/features/automations/` (`config` des règles, `rules` pures, `eng
   `Authorization: Bearer <CRON_SECRET>` (la route est désactivée si `CRON_SECRET` est absent). Exemple de cron :
   `curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://votre-crm/api/jobs/automations` chaque heure.
 
+## Audit et import (phase 4, sprint 4.6)
+
+Code dans `src/features/audit/` (consultation, export) et `src/features/imports/` (`config`, `parse`, `rules`,
+`analysis` pures, `service`), écrans `/admin/audit` et `/admin/import`, routes `/api/audit/export`,
+`/api/import/[id]/rejects` et `/api/import/template`. Utilitaire CSV partagé : `src/lib/csv.ts`.
+
+- **Journal d'audit** : filtrable, en ajout seul ; son export CSV (plafonné, limité en fréquence) est lui-même tracé.
+- **Import CSV/XLSX** (comptes puis contacts), réservé à l'administrateur : dépôt → association des colonnes →
+  analyse (rapport de qualité : rejets, doublons, champs manquants) → import après confirmation. Rien n'est écrit avant.
+- L'import est **reprenable** et sans double création ; les cellules d'origine sont effacées une fois importées.
+- Limites : 2 000 lignes et 5 Mo par fichier. Dans Excel, enregistrez les téléphones en texte pour garder le 0 initial.
+
 ## Administration des utilisateurs (phase 4, sprint 4.1)
 
 Code dans `src/features/users/` (`service`, `teams`, `schemas`) et `src/app/(crm)/admin/`. Réservée au rôle

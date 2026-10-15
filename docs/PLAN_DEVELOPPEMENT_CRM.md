@@ -661,6 +661,27 @@ Durées indicatives pour une équipe de 3 à 4 personnes (1 lead full-stack, 1�
 
 **Limites connues** : aucun ordonnanceur n'est fourni : il faut programmer l'appel (cron système, tâche planifiée de l'hébergeur) ; pas de notification par e-mail (aucun service d'envoi par décision) ; une notification groupée n'est pas mise à jour si de nouveaux éléments arrivent dans la même période (ils sont signalés à la période suivante) ; les notifications de synchronisation en échec attendent le lot 2 ; une tâche de relance est créée « au nom » de son responsable (pas d'utilisateur système) ; le fuseau est unique (UTC, soit Abidjan) ; l'interface n'a pas été parcourue de bout en bout avec une session authentifiée (vérifications faites sur les services, le script et la route).
 
+### Phase 4, sprint 4.6 — Audit et import : réalisée à 14/10/2026 (code dans `crm/src/features/audit/`, `imports/`, `crm/src/app/(crm)/admin/audit/`, `admin/import/`, `crm/src/app/api/audit/`, `api/import/`)
+
+| Élément du plan | État | Détail |
+|---|---|---|
+| Journal d'audit consultable (CDC 2.1 et 14) | Fait | Page `/admin/audit` : filtres par action (exacte ou famille), objet, auteur (dont « Système »), période ; détail des métadonnées ; pagination ; réservée à `audit:read` (administrateur et audit). Le journal reste **en ajout seul** (trigger PostgreSQL, vérifié par les tests) |
+| Couverture du journal | Fait | Connexions et déconnexions, changements de mot de passe, changements de responsable, fusions, utilisateurs et équipes (rôles, permissions), automatisations, imports, exports. Aucun compte n'étant supprimé (archivage), les suppressions concernent les équipes et les lignes d'import annulées |
+| Exports journalisés (CDC 8.3) | Fait | Export CSV du journal (`audit:export`) : plafonné à 5 000 lignes (les plus récentes), limité à 5 par minute, filtres invalides refusés (jamais d'export « complet » par erreur), formules neutralisées, et **chaque export est lui-même tracé** avec ses filtres |
+| Import CSV et XLSX (CDC 11 et 16) | Fait | Comptes puis contacts ; en quatre étapes : dépôt, association des colonnes, analyse, import. Réservé à l'administrateur (`import:run`) |
+| Association des colonnes | Fait | Proposée automatiquement (intitulés exacts puis synonymes, sans tenir compte des accents ni de la casse) et corrigeable ; valeurs par défaut (responsable, secteur, statut, pays) ; fichier modèle téléchargeable |
+| Validation | Fait | Les **mêmes schémas** que les formulaires ; reconnaissance des libellés saisis librement (« client », « Côte d'Ivoire ») ; nombres au format français ; domaine nettoyé (URL, adresse e-mail) ; responsable désigné par e-mail |
+| Déduplication | Fait | Comptes : identifiant légal et raison sociale (sans accents, à pays égal) ; contacts : e-mail et nom dans le même compte ; **en base et dans le fichier**, avec renvoi à la ligne d'origine |
+| Rapport de qualité (CDC 16) | Fait | Lignes valides, rejetées, doublons (en base / dans le fichier), motifs de rejet les plus fréquents, champs recommandés manquants, colonnes ignorées ; liste des lignes à corriger et **rapport des rejets téléchargeable** (CSV, journalisé) |
+| Sûreté de l'import | Fait | Rien n'est écrit avant l'analyse puis la **confirmation explicite** ; chaque ligne est importée dans sa propre transaction (réclamation + création) : pas de double création même si deux imports se chevauchent ; **reprenable** après interruption ; un conflit à l'insertion ne rejette que sa ligne ; chaque ligne garde l'identifiant de ce qu'elle a créé |
+| Données personnelles | Fait | Les cellules d'origine des lignes importées sont **effacées** ; un lot annulé supprime immédiatement toutes ses lignes |
+| Contrôles du fichier | Fait | Format vérifié sur le contenu (signature ZIP d'un .xlsx, absence d'octets nuls dans un .csv), 5 Mo et 2 000 lignes au maximum, .xls refusé, CSV en UTF-8 ou Windows-1252, séparateur deviné, cellules tronquées à 2 000 caractères |
+| Tests | Fait | 445 tests au total (24 d'intégration pour l'import, 16 pour l'audit, 57 unitaires pour le CSV et l'import), lint, `tsc` et build réussis |
+
+**Dépendances ajoutées** : `read-excel-file` (lecture XLSX) et `write-excel-file` (développement : fabrication de classeurs de test). `npm audit` signale 4 vulnérabilités élevées, **toutes dans l'outil `prisma`** (`deepmerge-ts`, `mysql2`, non utilisés à l'exécution) et antérieures à ce sprint ; aucune ne vient des paquets ajoutés.
+
+**Limites connues** : l'import est synchrone (2 000 lignes par fichier) : le cahier des charges demande un traitement asynchrone pour les volumes importants, à prévoir avec le worker du lot 2 ; seuls les comptes et les contacts s'importent (pas les opportunités, activités ni documents) ; pas de mise à jour des fiches existantes (les doublons sont ignorés) ni de retour arrière d'un import (les identifiants créés sont conservés dans le lot, une suppression ou une fusion se fait fiche par fiche) ; les créations importées sont tracées par un enregistrement par lot et non un par fiche ; les numéros de téléphone enregistrés comme nombres dans Excel perdent leur 0 initial (consigne affichée) ; la liste des secteurs est stricte (un secteur inconnu rejette la ligne, avec la valeur en cause dans le rapport) ; le journal d'audit n'a pas d'archivage ni de purge (ajout seul) ; l'interface n'a pas été parcourue de bout en bout avec une session authentifiée.
+
 ---
 
 ## Annexe — Parcours Excel : synthèse des écrans à construire
