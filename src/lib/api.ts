@@ -14,6 +14,23 @@ export async function apiUser(): Promise<CurrentUser> {
 }
 
 /**
+ * Fichier en téléchargement (CSV, XLSX…) : jamais mis en cache (donnée à jour et personnelle), type non devinable par le
+ * navigateur, nom de fichier ASCII de repli + nom UTF-8 pour les accents.
+ */
+export function fileResponse(filename: string, contentType: string, body: string | Buffer, extraHeaders: Record<string, string> = {}): Response {
+  const ascii = filename.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\w.-]+/g, "_");
+  return new Response(typeof body === "string" ? body : new Uint8Array(body), {
+    headers: {
+      "Content-Type": contentType,
+      "Content-Disposition": `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+      ...extraHeaders,
+    },
+  });
+}
+
+/**
  * Réponse CSV en téléchargement. Jamais mise en cache (donnée à jour et personnelle), type non devinable par le
  * navigateur, nom de fichier ASCII de repli + nom UTF-8 pour les accents.
  */

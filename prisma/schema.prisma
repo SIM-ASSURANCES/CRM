@@ -52,6 +52,7 @@ model User {
   importBatches      ImportBatch[]          @relation("ImportCreator")
   integrations       IntegrationConnection[]
   syncEvents         SyncEvent[]
+  salesTargets       SalesTarget[]          @relation("TargetOwner")
 
   @@index([teamId])
   @@index([role])
@@ -769,4 +770,24 @@ model ImportRow {
   @@unique([batchId, rowNumber])
   @@index([batchId, status])
   @@map("import_rows")
+}
+
+// Objectif commercial MENSUEL d'un commercial (CDC 8.2), comparé au forecast. Un objectif trimestriel ou annuel n'est
+// jamais saisi : c'est la somme des mois, ce qui évite des niveaux incohérents entre eux. Montant annualisé, en XOF.
+model SalesTarget {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  ownerUserId String   @map("owner_user_id") @db.Uuid
+  // Premier jour du mois (contrainte en base).
+  periodStart DateTime @map("period_start") @db.Date
+  amount      Decimal  @db.Decimal(18, 2)
+  currency    String   @default("XOF")
+  updatedBy   String?  @map("updated_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  owner User @relation("TargetOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerUserId, periodStart])
+  @@index([periodStart])
+  @@map("sales_targets")
 }

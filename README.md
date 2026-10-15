@@ -175,6 +175,20 @@ Code dans `src/features/audit/` (consultation, export) et `src/features/imports/
 
   Les identifiants générés sont écrits dans `.e2e-credentials` (ignoré par git).
 
+## Reporting avancé (phase 6)
+
+Code dans `src/features/reporting/` (`config` : dictionnaire des KPI ; `rules` et `schemas` purs ; `service` ; `export`),
+écrans `/rapports/previsions`, `/rapports/pertes` et `/admin/objectifs`, route `/api/reports/export`.
+
+- **Prévisions** : pipeline brut, pipeline pondéré, gagnées, revenu signé et forecast (signé + pondéré), par mois, trimestre
+  ou année, segmentés par produit, équipe, commercial, secteur ou groupe de comptes. **Montants annualisés** (mensuel × 12).
+- **Objectifs** : un montant par commercial et par mois (`/admin/objectifs`) ; trimestre, année et équipe en sont la somme.
+  Écart et taux d'atteinte affichés, « non calculable » quand l'objectif est absent.
+- **Motifs de perte** croisés avec le produit, le secteur, le commercial, la taille du compte ou l'équipe.
+- **Exports CSV / XLSX** (manager et au-dessus) : mêmes chiffres que l'écran (testé), filtres et date de génération en
+  en-tête, définitions des KPI incluses, limités en fréquence et en volume, chaque export tracé dans le journal d'audit.
+- Chacun ne voit que son périmètre (commercial : les siennes ; manager : son équipe ; direction, administrateur et audit : tout).
+
 ## Intégration Microsoft 365 — messagerie (phase 5)
 
 Code dans `src/features/integrations/` (`rules` pures, `connection`, `sync`, `subscriptions`, `webhook`, `exclusions`,

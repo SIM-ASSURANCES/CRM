@@ -344,10 +344,10 @@ Durées indicatives pour une équipe de 3 à 4 personnes (1 lead full-stack, 1�
 - [ ] Activation progressive avec un groupe pilote. *(procédure rédigée dans `docs/INTEGRATION_MICROSOFT.md` ; à mener avec une vraie application Azure)*
 
 ### Phase 6 — Reporting avancé (≈ 4 semaines)
-- [ ] Forecast mensuel / trimestriel / annuel, segmentation produit, équipe, commercial, secteur, groupe.
-- [ ] Objectifs et comparaison forecast vs objectif.
-- [ ] Croisement motifs de perte × produit × secteur × commercial.
-- [ ] Exports CSV/XLSX paginés, journalisés, limités par rôle, générés en job asynchrone ; cohérence KPI écran / export (REC-10).
+- [x] Forecast mensuel / trimestriel / annuel, segmentation produit, équipe, commercial, secteur, groupe.
+- [x] Objectifs et comparaison forecast vs objectif.
+- [x] Croisement motifs de perte × produit × secteur × commercial (+ taille du compte et équipe).
+- [x] Exports CSV/XLSX journalisés, limités par rôle ; cohérence KPI écran / export (REC-10). *(immédiats et plafonnés, pas de job asynchrone : décision du 15/10/2026 ; voir journal)*
 
 ### Phase 7 — Migration de données (≈ 3 semaines, en parallèle de la phase 5)
 - [ ] Inventaire des sources, volumes, qualité.
@@ -716,6 +716,25 @@ Durées indicatives pour une équipe de 3 à 4 personnes (1 lead full-stack, 1�
 **Changement d'infrastructure en cours de phase** : à la demande de l'utilisateur, le projet pointe désormais sur le **PostgreSQL local** (service Windows, PostgreSQL 18, port 5432) : bases dédiées `crm` (développement) et `crm_test` (tests), migrations appliquées, données de démonstration créées. L'ancienne base du conteneur Docker `crm_postgres` n'a pas été migrée ; ses URL sont conservées en commentaire dans `.env` (`DATABASE_URL_DOCKER`, `TEST_DATABASE_URL_DOCKER`).
 
 **Limites connues** : **le comportement réel de Microsoft n'a pas pu être vérifié ici** (il faut une application Azure, un locataire et, pour les webhooks, une adresse HTTPS publique) : le moteur est validé contre un faux fournisseur et des réponses simulées, pas contre Graph ; les formats de réponse retenus suivent la documentation Graph et devront être confirmés lors du premier essai pilote. Pas de regroupement par fils de conversation. Un message sans `Message-ID` est dédoublonné par son identifiant Graph, qui change si le message est déplacé (cas rare). Le rapprochement se fait sur l'adresse exacte du contact : un contact sans e-mail ou avec une autre adresse n'est pas reconnu. Le nom d'un utilisateur désactivé n'est pas retiré de la liste des connexions (sa lecture s'arrête, son statut reste visible).
+
+### Phase 6 — Reporting avancé : réalisée à 15/10/2026 (code dans `crm/src/features/reporting/`, `crm/src/app/(crm)/rapports/`, `admin/objectifs/`, `crm/src/app/api/reports/`)
+
+**Décisions prises avec l'utilisateur** : montants **annualisés** (mensuel × 12, annuel et unique tels quels) ; objectifs **par commercial et par mois** (un objectif trimestriel, annuel ou d'équipe est la somme des mois) ; exports **immédiats et plafonnés**, sans job asynchrone.
+
+| Élément du plan | État | Détail |
+|---|---|---|
+| Forecast mensuel / trimestriel / annuel | Fait | `/rapports/previsions` : pipeline brut, pipeline pondéré, gagnées, revenu signé et forecast (= signé + pondéré), par période, avec graphique ; une plage qui coupe un trimestre le lit en entier. Segmentation par produit, équipe, commercial, secteur et groupe de comptes (compte parent) ; chaque segmentation additionne au même total. Filtres produit et commercial |
+| Objectifs et comparaison | Fait | Table `sales_targets` (contraintes : montant ≥ 0, premier jour du mois) ; saisie `/admin/objectifs` (manager : son équipe ; direction et administrateur : tous). Écart et taux d'atteinte par période, par commercial et par équipe ; « non calculable » quand l'objectif est nul ou absent ; un commercial ayant un objectif mais aucun pipeline apparaît à zéro ; comparaison masquée avec un filtre produit |
+| Motifs de perte croisés | Fait | `/rapports/pertes` : matrice motif × produit, secteur, commercial, taille du compte (effectif) ou équipe, nombre et montant annualisé, répartition par motif |
+| Exports CSV / XLSX | Fait | `/api/reports/export` : forecast, motifs de perte et détail des opportunités. Réservé à `report:export` (manager et au-dessus), 10 exports par minute, détail plafonné à 5 000 lignes (annoncé dans le fichier), chaque export tracé (`report.exported`, critères seulement). Filtres appliqués, date de génération et définitions des KPI dans le fichier ; CSV avec virgule décimale pour l'Excel français, formules neutralisées ; XLSX avec onglet « Définitions » |
+| Cohérence écran / export (REC-10) | Fait | Un seul rapport en mémoire alimente l'écran et les deux formats ; un test relit le CSV et le XLSX exportés et compare chaque total à celui de l'écran. Dictionnaire des KPI unique (`reporting/config.ts`) |
+| Permissions | Fait | `report:read` (tous), `report:export` et `target:manage` (manager, direction, administrateur). Chaque lecture applique le périmètre de l'utilisateur ; un manager ne voit ni ne fixe les objectifs d'un commercial hors de son équipe |
+| Job asynchrone, pagination des exports | Non retenu | Décision : exports immédiats et plafonnés (pas de stockage de fichiers à exploiter). À reconsidérer si les volumes dépassent le plafond |
+| Tests | Fait | 546 tests (47 de plus), `tsc`, lint et build réussis : règles pures, filtres, périmètres, objectifs, motifs de perte, parité écran / export |
+| Défaut trouvé et corrigé | Fait | Le calcul prévoyait des opportunités ouvertes « sans date de clôture » ; la base l'interdit (contrainte `opportunities_open_requirements_check`) : concept supprimé plutôt que de défendre un état impossible |
+
+**Limites connues** : « revenu signé » = montant annualisé des opportunités gagnées ; la définition comptable (prime, commission, honoraires, premier paiement) reste à confirmer par le métier (CDC 5.3). Le groupe de comptes est le compte parent direct (un seul niveau). La taille d'un compte vient de son effectif (`employeeCount`), souvent non renseigné : la tranche « Taille inconnue » peut dominer tant que les comptes ne sont pas complétés. Les objectifs ne sont pas historisés (seule la dernière valeur est conservée, la trace d'audit garde le total annuel). Le détail mensuel d'un segment figure dans l'export, pas à l'écran. Aucun e-mail ni envoi planifié de rapport.
+
 
 ---
 

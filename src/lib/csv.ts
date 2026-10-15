@@ -81,16 +81,22 @@ export function guardFormula(value: string): string {
 
 export type CsvCell = string | number | boolean | Date | null | undefined;
 
-function formatCell(value: CsvCell): string {
+function formatCell(value: CsvCell, decimalComma: boolean): string {
   if (value === null || value === undefined) return "";
   if (value instanceof Date) return value.toISOString();
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  // Les nombres ne passent jamais par guardFormula : un écart négatif (« -1500 ») reste un nombre, pas du texte quoté.
+  if (typeof value === "number") return decimalComma ? String(value).replace(".", ",") : String(value);
+  if (typeof value === "boolean") return String(value);
   return guardFormula(value);
 }
 
-/** Écrit un CSV pour Excel : BOM UTF-8, séparateur « ; », guillemets si nécessaire, fins de ligne CRLF. */
-export function toCsv(rows: CsvCell[][], delimiter: Delimiter = ";"): string {
+/**
+ * Écrit un CSV pour Excel : BOM UTF-8, séparateur « ; », guillemets si nécessaire, fins de ligne CRLF.
+ * `decimalComma` écrit les nombres avec une virgule décimale (« 1234,5 »), que l'Excel français lit comme un nombre.
+ */
+export function toCsv(rows: CsvCell[][], delimiter: Delimiter = ";", options: { decimalComma?: boolean } = {}): string {
+  const decimalComma = options.decimalComma ?? false;
   const quote = (cell: string) =>
     cell.includes(delimiter) || cell.includes('"') || cell.includes("\n") || cell.includes("\r") ? `"${cell.replace(/"/g, '""')}"` : cell;
-  return `﻿${rows.map((row) => row.map((cell) => quote(formatCell(cell))).join(delimiter)).join("\r\n")}\r\n`;
+  return `﻿${rows.map((row) => row.map((cell) => quote(formatCell(cell, decimalComma))).join(delimiter)).join("\r\n")}\r\n`;
 }

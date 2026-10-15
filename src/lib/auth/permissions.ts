@@ -23,7 +23,12 @@ export const PERMISSIONS = [
   "activity:write",
   "task:read",
   "task:write",
+  // Rapports de prévisions et de motifs de perte (CDC 8.2) : chacun ne voit que son périmètre. L'export est réservé aux
+  // managers et au-dessus (CDC 8.3 : limiter les exports de masse par rôle).
+  "report:read",
   "report:export",
+  // Fixer les objectifs mensuels des commerciaux (un manager ne fixe que ceux de son équipe).
+  "target:manage",
   "user:manage",
   "audit:read",
   // Exporter le journal d'audit (chaque export est lui-même journalisé, CDC 8.3).
@@ -55,7 +60,9 @@ const MATRIX: Record<Role, readonly Permission[]> = {
     "activity:write",
     "task:read",
     "task:write",
+    "report:read",
     "report:export",
+    "target:manage",
     "integration:connect",
   ],
   manager: [
@@ -73,7 +80,9 @@ const MATRIX: Record<Role, readonly Permission[]> = {
     "activity:write",
     "task:read",
     "task:write",
+    "report:read",
     "report:export",
+    "target:manage",
     "integration:connect",
   ],
   commercial: [
@@ -90,6 +99,7 @@ const MATRIX: Record<Role, readonly Permission[]> = {
     "activity:write",
     "task:read",
     "task:write",
+    "report:read",
     "integration:connect",
   ],
   audit: [
@@ -100,6 +110,7 @@ const MATRIX: Record<Role, readonly Permission[]> = {
     "opportunity:read",
     "activity:read",
     "task:read",
+    "report:read",
     "audit:read",
     "audit:export",
   ],

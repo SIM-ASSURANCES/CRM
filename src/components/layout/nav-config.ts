@@ -1,6 +1,8 @@
 import {
   Activity,
   Building2,
+  ChartColumn,
+  ChartPie,
   ContactRound,
   FileUp,
   Handshake,
@@ -11,6 +13,7 @@ import {
   Percent,
   ScrollText,
   Send,
+  Target,
   TrendingUp,
   UserCheck,
   UserCog,
@@ -91,11 +94,19 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    label: "Reporting",
+    items: [
+      { href: "/rapports/previsions", label: "Prévisions", icon: ChartColumn, permission: "report:read" },
+      { href: "/rapports/pertes", label: "Motifs de perte", icon: ChartPie, permission: "report:read" },
+    ],
+  },
+  {
     label: "Administration",
     items: [
       { href: "/admin/utilisateurs", label: "Utilisateurs", icon: UserCog, permission: "user:manage" },
       { href: "/admin/demandes", label: "Demandes de réinitialisation", icon: KeyRound, permission: "user:manage" },
       { href: "/admin/equipes", label: "Équipes", icon: UsersRound, permission: "user:manage" },
+      { href: "/admin/objectifs", label: "Objectifs commerciaux", icon: Target, permission: "target:manage" },
       { href: "/admin/automatisations", label: "Automatisations", icon: Workflow, permission: "settings:manage" },
       { href: "/admin/import", label: "Import de données", icon: FileUp, permission: "import:run" },
       { href: "/admin/audit", label: "Journal d'audit", icon: ScrollText, permission: "audit:read" },

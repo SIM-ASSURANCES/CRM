@@ -113,6 +113,18 @@ describe("permissions", () => {
     expect(can("audit", "integration:connect")).toBe(false);
   });
 
+  it("donne la lecture des rapports à tous, mais l'export et les objectifs aux managers et au-dessus (CDC 8.3)", () => {
+    for (const role of ROLES) expect(can(role, "report:read")).toBe(true);
+    for (const role of ["admin", "direction", "manager"] as const) {
+      expect(can(role, "report:export")).toBe(true);
+      expect(can(role, "target:manage")).toBe(true);
+    }
+    for (const role of ["commercial", "audit"] as const) {
+      expect(can(role, "report:export")).toBe(false);
+      expect(can(role, "target:manage")).toBe(false);
+    }
+  });
+
   it("donne l'accès au tableau de bord à tous les rôles", () => {
     for (const role of ROLES) {
       expect(can(role, "dashboard:read")).toBe(true);

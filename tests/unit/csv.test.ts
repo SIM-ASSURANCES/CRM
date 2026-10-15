@@ -61,6 +61,9 @@ describe("écriture CSV", () => {
 
   it("ne modifie pas un nombre négatif transmis comme nombre", () => {
     expect(toCsv([[-5]])).toBe("﻿-5\r\n");
+    // Option « virgule décimale » (exports de reporting) : désactivée par défaut, et un négatif reste un nombre.
+    expect(toCsv([[1234.5, -1500.25, 12, "texte 1.5"]])).toBe("﻿1234.5;-1500.25;12;texte 1.5\r\n");
+    expect(toCsv([[1234.5, -1500.25, 12, "texte 1.5"]], ";", { decimalComma: true })).toBe("﻿1234,5;-1500,25;12;texte 1.5\r\n");
   });
 
   it("relit ce qu'il écrit", () => {
