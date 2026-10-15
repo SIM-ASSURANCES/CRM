@@ -2,6 +2,7 @@ import "server-only";
 import { accountScopeWhere } from "@/features/accounts/scope";
 import { FEED_LIMIT } from "@/features/activities/config";
 import type { CreateActivityInput, FeedFilters, UpdateActivityInput } from "@/features/activities/schemas";
+import { safeWebLink } from "@/features/integrations/rules";
 import { opportunityScopeWhere } from "@/features/opportunities/scope";
 import { isTaskOverdue } from "@/features/tasks/rules";
 import { taskScopeWhere } from "@/features/tasks/scope";
@@ -36,6 +37,8 @@ export type FeedItem = {
   detail: string | null;
   nextAction: string | null;
   nextActionDate: Date | null;
+  /** Lien vers l'élément d'origine (message Outlook), déjà validé (https seulement) ; absent pour les saisies manuelles. */
+  externalUrl?: string | null;
   /** Statut de la tâche (open, done, cancelled) ; absent pour les autres événements. */
   status?: string;
   overdue?: boolean;
@@ -396,6 +399,8 @@ export async function listFeed(user: CurrentUser, filters: FeedFilters = {}, now
         detail: a.outcome,
         nextAction: a.nextAction,
         nextActionDate: a.nextActionDate,
+        // Revalidé à la lecture : la base peut contenir une valeur antérieure ou altérée.
+        externalUrl: safeWebLink(a.externalUrl),
         editable: canEditActivityOf(user, a),
       }),
     ),

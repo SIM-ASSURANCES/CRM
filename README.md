@@ -175,6 +175,26 @@ Code dans `src/features/audit/` (consultation, export) et `src/features/imports/
 
   Les identifiants générés sont écrits dans `.e2e-credentials` (ignoré par git).
 
+## Intégration Microsoft 365 — messagerie (phase 5)
+
+Code dans `src/features/integrations/` (`rules` pures, `connection`, `sync`, `subscriptions`, `webhook`, `exclusions`,
+`microsoft/oauth` et `microsoft/graph`), écran `/integrations` (« Messagerie »), routes `/api/integrations/microsoft/callback`
+et `/webhook`, `/api/jobs/integrations`. Chiffrement des jetons : `src/lib/crypto.ts`. Guide complet :
+[`docs/INTEGRATION_MICROSOFT.md`](docs/INTEGRATION_MICROSOFT.md).
+
+- **Lecture seule** : chaque utilisateur connecte sa boîte ; le CRM lit les **en-têtes** (objet, expéditeur, destinataires, date)
+  et crée une activité « e-mail » sur les comptes dont un contact est interlocuteur. Jamais le contenu ni les pièces jointes.
+- Désactivée tant que `MS_CLIENT_ID`, `MS_CLIENT_SECRET` et `TOKEN_ENCRYPTION_KEY` sont absents (voir `.env.example`).
+- Planificateur : `POST /api/jobs/integrations` toutes les 1 à 2 minutes, avec `Authorization: Bearer $CRON_SECRET`.
+- Tests : un faux fournisseur Microsoft remplace le réseau ; le comportement réel de Graph reste à confirmer avec une
+  application Azure (essai pilote).
+
+## Base de données locale
+
+Le projet peut utiliser le PostgreSQL installé sur la machine (bases `crm` et `crm_test`) ou le conteneur Docker (`npm run db:up`).
+Pour changer de base : modifier `DATABASE_URL` et `TEST_DATABASE_URL` dans `.env`, puis `npm run db:deploy` (développement)
+et appliquer les migrations à la base de test avant `npm test`.
+
 ## Administration des utilisateurs (phase 4, sprint 4.1)
 
 Code dans `src/features/users/` (`service`, `teams`, `schemas`) et `src/app/(crm)/admin/`. Réservée au rôle

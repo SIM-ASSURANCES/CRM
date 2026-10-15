@@ -50,6 +50,8 @@ model User {
   tasksCreated       Task[]                 @relation("TaskCreator")
   notifications      Notification[]
   importBatches      ImportBatch[]          @relation("ImportCreator")
+  integrations       IntegrationConnection[]
+  syncEvents         SyncEvent[]
 
   @@index([teamId])
   @@index([role])
@@ -506,6 +508,11 @@ model Activity {
   nextActionDate DateTime? @map("next_action_date") @db.Date
   // user | sync | automation
   origin         String    @default("user")
+  // Activité issue d'une synchronisation : fournisseur, identifiant technique du message (dédoublonnage) et lien
+  // vers l'élément d'origine. Un message vu par plusieurs comptes donne une activité par compte.
+  externalProvider String? @map("external_provider")
+  externalId       String? @map("external_id")
+  externalUrl      String? @map("external_url")
   version        Int       @default(1)
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -617,6 +624,93 @@ model Notification {
   @@unique([userId, dedupeKey])
   @@index([userId, readAt, createdAt])
   @@map("notifications")
+}
+
+// Connexion d'un utilisateur à un fournisseur externe (CDC 7). Les jetons ne sont JAMAIS stockés en clair : ils sont
+// chiffrés (AES-256-GCM) avec une clé qui ne figure pas en base. Un utilisateur a au plus une connexion par fournisseur.
+model IntegrationConnection {
+  id                   String    @id @default(uuid(7)) @db.Uuid
+  userId               String    @map("user_id") @db.Uuid
+  // microsoft
+  provider             String
+  // active | needs_reconnect | revoked
+  status               String    @default("active")
+  // Adresse du compte connecté (affichage, et exclusion des propres adresses lors du rapprochement).
+  accountEmail         String?   @map("account_email")
+  externalUserId       String?   @map("external_user_id")
+  // Droits accordés (moindre privilège : lecture des en-têtes de messages seulement).
+  scopes               String
+  accessTokenEnc       String?   @map("access_token_enc")
+  refreshTokenEnc      String?   @map("refresh_token_enc")
+  accessTokenExpiresAt DateTime? @map("access_token_expires_at") @db.Timestamptz(3)
+  // Curseurs de synchronisation incrémentale par dossier (« delta »).
+  cursors              Json      @default("{}")
+  // Date à partir de laquelle les messages sont importés (première synchronisation bornée).
+  syncSince            DateTime  @map("sync_since") @db.Timestamptz(3)
+  // Verrou : une seule synchronisation à la fois par connexion.
+  syncingSince         DateTime? @map("syncing_since") @db.Timestamptz(3)
+  // Demandée par une notification du fournisseur (webhook) : traitée par la prochaine exécution.
+  syncRequestedAt      DateTime? @map("sync_requested_at") @db.Timestamptz(3)
+  lastSyncAt           DateTime? @map("last_sync_at") @db.Timestamptz(3)
+  lastSuccessAt        DateTime? @map("last_success_at") @db.Timestamptz(3)
+  lastError            String?   @map("last_error")
+  // Abonnement aux notifications du fournisseur (webhooks) et secret de vérification des appels reçus.
+  subscriptionId       String?   @map("subscription_id")
+  subscriptionExpiresAt DateTime? @map("subscription_expires_at") @db.Timestamptz(3)
+  webhookSecret        String?   @map("webhook_secret")
+  consentedAt          DateTime  @map("consented_at") @db.Timestamptz(3)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events SyncEvent[]
+
+  @@unique([userId, provider])
+  @@unique([subscriptionId])
+  @@index([provider, status])
+  @@map("integration_connections")
+}
+
+// Journal des synchronisations (CDC 7.3 : fournisseur, statut, dernière tentative ; REC-07, 08 et 11).
+model SyncEvent {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  connectionId String?   @map("connection_id") @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  provider     String
+  // mail_sync | connected | disconnected | token_refresh | webhook | subscription
+  kind         String
+  // manual | schedule | webhook | system
+  trigger      String
+  // running | success | partial | error
+  status       String    @default("running")
+  startedAt    DateTime  @default(now()) @map("started_at") @db.Timestamptz(3)
+  finishedAt   DateTime? @map("finished_at") @db.Timestamptz(3)
+  // Messages lus, importés (activités créées), écartés (sans correspondance, exclus, brouillons) et déjà connus.
+  fetched      Int       @default(0)
+  imported     Int       @default(0)
+  skipped      Int       @default(0)
+  duplicates   Int       @default(0)
+  error        String?
+
+  connection IntegrationConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([connectionId, startedAt])
+  @@index([userId, startedAt])
+  @@map("sync_events")
+}
+
+// Jeton de protection (« state » + vérificateur PKCE) d'une connexion OAuth en cours : à usage unique, valable quelques minutes.
+model OAuthState {
+  state        String   @id
+  userId       String   @map("user_id") @db.Uuid
+  provider     String
+  codeVerifier String   @map("code_verifier")
+  expiresAt    DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([expiresAt])
+  @@map("oauth_states")
 }
 
 // Import initial de données (CDC 11 et 14) : un lot = un fichier déposé, avec son mapping, son rapport de qualité et

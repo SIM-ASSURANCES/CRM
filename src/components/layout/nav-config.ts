@@ -7,6 +7,7 @@ import {
   KeyRound,
   LayoutDashboard,
   ListChecks,
+  Mail,
   Percent,
   ScrollText,
   Send,
@@ -66,6 +67,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/taches", label: "Tâches", icon: ListChecks, permission: "task:read" },
       { href: "/activites", label: "Activités", icon: Activity, permission: "activity:read" },
+      { href: "/integrations", label: "Messagerie", icon: Mail, permission: "integration:connect" },
     ],
   },
   {

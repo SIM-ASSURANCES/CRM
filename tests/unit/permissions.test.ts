@@ -106,6 +106,13 @@ describe("permissions", () => {
     expect(can("manager", "report:export")).toBe(true);
   });
 
+  it("autorise la connexion d'une messagerie à tous les rôles qui travaillent des dossiers, sauf l'audit (lecture seule)", () => {
+    for (const role of ["admin", "direction", "manager", "commercial"] as const) {
+      expect(can(role, "integration:connect")).toBe(true);
+    }
+    expect(can("audit", "integration:connect")).toBe(false);
+  });
+
   it("donne l'accès au tableau de bord à tous les rôles", () => {
     for (const role of ROLES) {
       expect(can(role, "dashboard:read")).toBe(true);

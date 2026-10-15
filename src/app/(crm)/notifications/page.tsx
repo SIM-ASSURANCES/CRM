@@ -30,6 +30,7 @@ export default function NotificationsPage({ searchParams }: { searchParams: Sear
 /** Libellé de l'origine : le nom de la règle pour une relance automatique, sinon l'événement. */
 function sourceLabel(source: string): string {
   if (isRuleCode(source)) return ruleLabel(source);
+  if (source === "integration") return "Messagerie";
   return source === "owner_changed" ? "Changement de responsable" : source;
 }
 

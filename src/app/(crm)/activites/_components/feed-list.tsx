@@ -113,6 +113,13 @@ export function FeedList({ items, truncated, hideAccount, returnTo, emptyText }:
                 </p>
 
                 {item.detail && <p className="whitespace-pre-line text-ink-soft">{item.detail}</p>}
+                {item.externalUrl && (
+                  <p className="text-xs">
+                    <a href={item.externalUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-brand-700 hover:underline">
+                      Ouvrir dans Outlook
+                    </a>
+                  </p>
+                )}
                 {item.nextAction && (
                   <p className="text-xs text-ink-soft">
                     <strong>Prochaine action :</strong> {item.nextAction}

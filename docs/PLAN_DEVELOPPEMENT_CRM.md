@@ -336,12 +336,12 @@ Durées indicatives pour une équipe de 3 à 4 personnes (1 lead full-stack, 1�
 - **Sortie** : tests fonctionnels réussis (CDC 16.1).
 
 ### Phase 5 — Intégrations (≈ 6 semaines, après choix du fournisseur prioritaire)
-- [ ] OAuth 2.0 (scopes minimaux), consentement, stockage chiffré des jetons.
-- [ ] Synchronisation e-mail : indexation, déduplication par identifiant technique, fils de conversation, exclusion de domaines/messages personnels.
-- [ ] Synchronisation calendrier bidirectionnelle, règle de conflit, création de liens Meet ou Teams.
-- [ ] Webhooks signés et idempotents, réponse rapide puis traitement différé, resynchronisation après perte de curseur.
-- [ ] État de connexion visible, reconnexion guidée, journal `sync_events` (REC-07, 08, 11).
-- [ ] Activation progressive avec un groupe pilote.
+- [x] OAuth 2.0 (scopes minimaux), consentement, stockage chiffré des jetons. *(Microsoft 365, lot e-mails ; voir journal 5.1)*
+- [x] Synchronisation e-mail : indexation, déduplication par identifiant technique, exclusion de domaines/messages personnels. *(fils de conversation : reporté)*
+- [ ] Synchronisation calendrier bidirectionnelle, règle de conflit (retenue : le calendrier de l'utilisateur fait foi), création de liens Meet ou Teams. *(lot suivant)*
+- [x] Webhooks authentifiés et idempotents, réponse rapide puis traitement différé, resynchronisation après perte de curseur.
+- [x] État de connexion visible, reconnexion guidée, journal `sync_events` (REC-07, 08, 11).
+- [ ] Activation progressive avec un groupe pilote. *(procédure rédigée dans `docs/INTEGRATION_MICROSOFT.md` ; à mener avec une vraie application Azure)*
 
 ### Phase 6 — Reporting avancé (≈ 4 semaines)
 - [ ] Forecast mensuel / trimestriel / annuel, segmentation produit, équipe, commercial, secteur, groupe.
@@ -696,6 +696,26 @@ Durées indicatives pour une équipe de 3 à 4 personnes (1 lead full-stack, 1�
 **Limites connues** : pas de suite E2E automatisée (Playwright) : le parcours ci-dessus est manuel et son environnement est scripté, mais pas encore rejouable en un clic ; le glisser-déposer du Kanban n'a pas été exercé à la souris (le sélecteur, qui passe par la même boîte de confirmation, l'a été) ; le dépôt d'un fichier par le navigateur n'a pas été exercé (le lot d'essai a été créé par le service, puis analysé et importé depuis l'interface) ; les mesures de performance portent sur les services et la base, pas sur le rendu du navigateur ni sur le réseau ; le jeu de données est synthétique (répartition plausible, mais pas celle des données réelles de SIM) ; avec des centaines d'utilisateurs, la liste déroulante des responsables de l'import deviendrait longue (hors périmètre pour une équipe commerciale).
 
 **Sortie de phase** : tests fonctionnels réussis (CDC 16.1). La phase 4 (MVP-B « Socle CRM ») est complète côté code ; restent, avant une mise en production, la revue de sécurité (CSP, sauvegardes, restauration) prévue aux phases suivantes et la validation métier des listes et seuils.
+
+### Phase 5 — Intégrations Microsoft 365 (lot e-mails, lecture seule) : réalisée à 15/10/2026 (code dans `crm/src/features/integrations/`, `crm/src/app/(crm)/integrations/`, `crm/src/app/api/integrations/`, `api/jobs/integrations/`)
+
+**Décisions prises avec l'utilisateur** : fournisseur **Microsoft 365** ; périmètre **e-mails en lecture seule** d'abord ; règle de conflit du futur lot calendrier : **le calendrier de l'utilisateur gagne**. Guide d'installation et d'exploitation : `docs/INTEGRATION_MICROSOFT.md`.
+
+| Élément du plan | État | Détail |
+|---|---|---|
+| OAuth 2.0, consentement, jetons chiffrés | Fait | Code d'autorisation + PKCE S256, état anti-CSRF lié à l'utilisateur, à usage unique, expirant en 10 min. Droits minimaux : `offline_access`, `User.Read`, `Mail.ReadBasic` (en-têtes seulement, jamais le corps ni les pièces jointes). Jetons AES-256-GCM, liés à leur ligne et colonne (`src/lib/crypto.ts`), clé `TOKEN_ENCRYPTION_KEY` hors base. Jeton d'actualisation tourné et réenregistré avant usage |
+| Synchronisation e-mail | Fait | Lecture incrémentale « delta » de la boîte de réception et des éléments envoyés, curseur enregistré après chaque page, 30 jours à la première lecture. Une activité « e-mail » par compte visible de l'utilisateur dont un contact est interlocuteur ; dédoublonnage par `Message-ID` (index unique partiel sur `activities`) ; brouillons, messages personnels/privés/confidentiels et domaines exclus écartés ; lien « Ouvrir dans Outlook » validé (https seulement) |
+| Webhooks | Fait | Abonnement `me/messages` créé et renouvelé automatiquement, secret `clientState` par connexion comparé en temps constant, poignée de main `validationToken`, corps borné, réponse 202 immédiate ; le webhook ne fait que marquer la connexion, la lecture est différée (route planifiée). Perte de curseur (410) → relecture complète sans doublon ; 429 → synchronisation partielle ; 401 → un renouvellement forcé puis reconnexion |
+| État visible, reconnexion guidée, journal | Fait | Page `/integrations` (statut, dernière réussite, incident, connecter/reconnecter/synchroniser/déconnecter), journal `sync_events`, vue d'ensemble administrateur et audit (REC-11), notification unique par période de consentement quand l'accès est révoqué |
+| Verrou et idempotence | Fait | Verrou par connexion en base (repris au bout de 10 min), délai minimal de 30 s entre deux synchronisations manuelles, exécution planifiée bornée (25 connexions, 20 pages par dossier) |
+| Synchronisation calendrier, liens Teams | Reporté | Lot suivant ; les droits correspondants ne sont pas demandés tant que la fonction n'existe pas |
+| Activation avec un groupe pilote | À faire | Procédure rédigée ; nécessite une application Azure réelle |
+| Tests | Fait | 499 tests (54 de plus), `tsc`, lint et build réussis. Un faux fournisseur Microsoft remplace le réseau : connexion, états rejoués/expirés, jetons chiffrés, reconnexion même compte/autre compte, périmètre, exclusions, idempotence, curseurs, 410/429/401, révocation, verrou, webhook, abonnements, vue d'ensemble |
+| Défaut trouvé et corrigé | Fait | Le filtre OData de la première lecture était encodé avec des `+` pour les espaces ; remplacé par `%20`, seule forme garantie |
+
+**Changement d'infrastructure en cours de phase** : à la demande de l'utilisateur, le projet pointe désormais sur le **PostgreSQL local** (service Windows, PostgreSQL 18, port 5432) : bases dédiées `crm` (développement) et `crm_test` (tests), migrations appliquées, données de démonstration créées. L'ancienne base du conteneur Docker `crm_postgres` n'a pas été migrée ; ses URL sont conservées en commentaire dans `.env` (`DATABASE_URL_DOCKER`, `TEST_DATABASE_URL_DOCKER`).
+
+**Limites connues** : **le comportement réel de Microsoft n'a pas pu être vérifié ici** (il faut une application Azure, un locataire et, pour les webhooks, une adresse HTTPS publique) : le moteur est validé contre un faux fournisseur et des réponses simulées, pas contre Graph ; les formats de réponse retenus suivent la documentation Graph et devront être confirmés lors du premier essai pilote. Pas de regroupement par fils de conversation. Un message sans `Message-ID` est dédoublonné par son identifiant Graph, qui change si le message est déplacé (cas rare). Le rapprochement se fait sur l'adresse exacte du contact : un contact sans e-mail ou avec une autre adresse n'est pas reconnu. Le nom d'un utilisateur désactivé n'est pas retiré de la liste des connexions (sa lecture s'arrête, son statut reste visible).
 
 ---
 

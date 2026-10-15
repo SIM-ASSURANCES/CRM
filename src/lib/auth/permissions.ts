@@ -30,6 +30,8 @@ export const PERMISSIONS = [
   "audit:export",
   // Importer des données initiales (comptes, contacts) depuis un fichier CSV ou XLSX.
   "import:run",
+  // Connecter SA propre messagerie (Microsoft 365) : chacun ne gère que sa connexion ; l'audit n'écrit rien.
+  "integration:connect",
   "settings:manage",
 ] as const;
 
@@ -54,6 +56,7 @@ const MATRIX: Record<Role, readonly Permission[]> = {
     "task:read",
     "task:write",
     "report:export",
+    "integration:connect",
   ],
   manager: [
     "dashboard:read",
@@ -71,6 +74,7 @@ const MATRIX: Record<Role, readonly Permission[]> = {
     "task:read",
     "task:write",
     "report:export",
+    "integration:connect",
   ],
   commercial: [
     "dashboard:read",
@@ -86,6 +90,7 @@ const MATRIX: Record<Role, readonly Permission[]> = {
     "activity:write",
     "task:read",
     "task:write",
+    "integration:connect",
   ],
   audit: [
     "dashboard:read",
