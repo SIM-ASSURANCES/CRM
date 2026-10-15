@@ -159,6 +159,22 @@ Code dans `src/features/audit/` (consultation, export) et `src/features/imports/
 - L'import est **reprenable** et sans double création ; les cellules d'origine sont effacées une fois importées.
 - Limites : 2 000 lignes et 5 Mo par fichier. Dans Excel, enregistrez les téléphones en texte pour garder le 0 initial.
 
+## Stabilisation (phase 4, sprint 4.7)
+
+- `npm test` : suite complète (unitaires + intégration sur la base de test `crm_test`).
+- `npm run test:perf` : tests de performance sur un jeu de 80 000 lignes (5 000 comptes, 15 000 contacts, 10 000
+  opportunités, 40 000 activités, 10 000 tâches), avec un budget de temps par écran. **Base de test uniquement** : le
+  jeu est créé puis supprimé.
+- Essai de bout en bout dans le navigateur, sans toucher à la base de développement :
+
+  ```bash
+  node scripts/e2e-env.mjs npx tsx --conditions=react-server prisma/seed.ts          # données de démonstration
+  node scripts/e2e-env.mjs npx tsx --conditions=react-server scripts/e2e-user.ts      # comptes d'essai (mots de passe générés)
+  npm run dev:e2e                                                                      # http://localhost:3101
+  ```
+
+  Les identifiants générés sont écrits dans `.e2e-credentials` (ignoré par git).
+
 ## Administration des utilisateurs (phase 4, sprint 4.1)
 
 Code dans `src/features/users/` (`service`, `teams`, `schemas`) et `src/app/(crm)/admin/`. Réservée au rôle

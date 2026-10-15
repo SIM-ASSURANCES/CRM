@@ -48,3 +48,7 @@ next-env.d.ts
 
 # configuration locale de l'outil d'aperçu (propre à chaque poste)
 /.claude
+
+# essais de bout en bout (identifiants générés, base de test)
+/.e2e-credentials
+/perf-output.txt
