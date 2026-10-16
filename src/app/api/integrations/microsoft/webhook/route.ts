@@ -1,6 +1,8 @@
 import { connection } from "next/server";
 import { handleNotifications, MAX_WEBHOOK_BODY_BYTES } from "@/features/integrations/webhook";
+import { getRequestContext } from "@/lib/audit";
 import { logger } from "@/lib/logger";
+import { rateLimit } from "@/lib/rate-limit";
 
 // Point d'entrée des notifications Microsoft Graph. Route PUBLIQUE par nature (Microsoft n'a pas de session) : elle ne
 // fait confiance à rien. Chaque notification est authentifiée par son secret (`clientState`) dans le service, et ne fait
@@ -8,9 +10,17 @@ import { logger } from "@/lib/logger";
 
 const TEXT = { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
 const MAX_VALIDATION_TOKEN = 1024;
+// Plafond par adresse IP : très au-dessus du débit normal de Microsoft (notifications groupées), mais borne les
+// inondations anonymes qui déclencheraient une lecture de la base à chaque appel. Limiteur en mémoire (instance unique).
+const WEBHOOK_LIMIT = { limit: 600, windowMs: 60_000 };
 
 export async function POST(request: Request) {
   await connection();
+
+  const { ipAddress } = await getRequestContext();
+  if (!rateLimit(`ms-webhook:${ipAddress ?? "inconnue"}`, WEBHOOK_LIMIT).ok) {
+    return new Response(null, { status: 429, headers: { "Retry-After": "60" } });
+  }
 
   // Poignée de main à la création de l'abonnement : Microsoft envoie un jeton que l'on doit renvoyer tel quel, en texte brut.
   const validationToken = new URL(request.url).searchParams.get("validationToken");

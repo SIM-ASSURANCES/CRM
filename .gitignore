@@ -52,4 +52,5 @@ next-env.d.ts
 # essais de bout en bout (identifiants générés, base de test)
 /.e2e-credentials
 /.dev-credentials
+/.recette-credentials
 /perf-output.txt

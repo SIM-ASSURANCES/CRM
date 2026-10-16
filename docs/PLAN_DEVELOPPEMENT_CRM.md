@@ -356,12 +356,12 @@ Durées indicatives pour une équipe de 3 à 4 personnes (1 lead full-stack, 1�
 - **Sortie** : rapprochement accepté. *(rapprochement fichier ↔ base, validation explicite par l'administrateur, puis effacement de la source)*
 
 ### Phase 8 — Recette utilisateur (≈ 3 semaines)
-- [ ] Environnement dédié et données de test anonymisées.
-- [ ] Exécution des scénarios REC-01 à REC-12 + scénarios issus de l'Excel.
-- [ ] Suivi des anomalies, correctifs, retests.
-- [ ] Test de restauration de sauvegarde (REC-12).
-- [ ] Audit de sécurité (dépendances, OWASP Top 10, rate limiting, fichiers).
-- **Sortie** : procès-verbal signé par un représentant métier et un responsable technique.
+- [x] Environnement dédié et données de test anonymisées. *(base `crm_recette`, jeu fictif reproductible, serveur sur le port 3200)*
+- [ ] Exécution des scénarios REC-01 à REC-12 + scénarios issus de l'Excel. *(partie automatisée faite et tracée ; **exécution manuelle par le métier à faire** ; REC-08 non couvert, REC-07 à éprouver sur Graph réel)*
+- [ ] Suivi des anomalies, correctifs, retests. *(registre ouvert dans `docs/RECETTE.md`, 3 corrigées, 4 ouvertes ; retests à faire avec le métier)*
+- [x] Test de restauration de sauvegarde (REC-12). *(scripté, RPO 24 h / RTO 4 h ; à refaire sur l'hébergement cible)*
+- [x] Audit de sécurité (dépendances, OWASP Top 10, rate limiting, fichiers). *(audit interne : `docs/RECETTE_SECURITE.md` ; pas de test d'intrusion par un tiers)*
+- **Sortie** : procès-verbal signé par un représentant métier et un responsable technique. *(modèle vierge dans `docs/RECETTE.md` ; à signer par les personnes habilitées)*
 
 ### Phase 9 — Mise en production (≈ 1 semaine)
 - [ ] Provisionnement, HTTPS, domaine, secrets, sauvegardes automatiques.
@@ -753,6 +753,25 @@ Durées indicatives pour une équipe de 3 à 4 personnes (1 lead full-stack, 1�
 | Tests | Fait | Unitaires (téléphone, valeurs, analyse, profil) et d'intégration sur `crm_test` (migration, import, rapprochement, purge, normalisation) ; `tsc`, lint et build réussis. Parcours vérifié dans le navigateur : dépôt, inventaire, analyse, correspondances, import, rapprochement (13 345 790 FCFA fichier = base), validation |
 
 **Limites connues** : aucun vrai fichier source n'a été éprouvé (le parcours a été testé avec des fichiers de test) ; la table `SECTOR_ALIASES` doit être validée avec le métier. Les numéros à 8 chiffres exigent une table de préfixes par opérateur pour être migrés : en attendant ils sont signalés (rejet pour un prospect, où le téléphone est obligatoire ; avertissement pour un compte ou un contact). Les opportunités et activités ne sont pas migrées (seulement comptes, contacts, prospects). « 100 % = gagné » est une présomption à confirmer par le métier. Les données de démonstration existantes peuvent porter des téléphones à normaliser.
+
+### Phase 8 — Recette utilisateur : préparée le 16/10/2026 (reste à exécuter avec le métier) — documents `crm/docs/RECETTE.md`, `crm/docs/RECETTE_SECURITE.md`, `crm/docs/recette/`
+
+**Décisions prises avec l'utilisateur** : objectifs de reprise **RPO 24 h / RTO 4 h** ; environnement de recette = **base locale `crm_recette`** alimentée par un script d'anonymisation reproductible, serveur sur le port 3200. Pour la CSP, l'utilisateur avait retenu « stricte avec nonce » : **c'est inapplicable** (voir ci-dessous) et un compromis a été appliqué.
+
+| Élément du plan | État | Détail |
+|---|---|---|
+| Environnement de recette | Fait | `npm run recette:init` / `recette:reset` / `recette:start` (`scripts/recette-env.mjs`) : crée la base, applique les migrations, charge `scripts/recette-seed.ts`. Jeu **fictif et déterministe** (graine fixe) : 11 utilisateurs, 190 comptes, 380 contacts, 280 opportunités, 160 prospects, 662 activités, 170 tâches, objectifs mensuels ; adresses `@recette.example`. Mots de passe générés dans `.recette-credentials` (ignoré par git) |
+| Scénarios REC-01 à REC-12 + 7 parcours Excel | Partiel | `tests/unit/recette-traceability.test.ts` relie chaque scénario à des tests existants et **échoue si un test cité disparaît** ; `docs/RECETTE.md` donne aussi l'étape à exécuter à la main. **Non exécutés à la main par le métier.** REC-08 (calendrier) **non couvert** : la phase 5 était limitée aux e-mails. REC-07 n'a jamais été éprouvé contre Graph réel |
+| Restauration (REC-12) | Fait | `npm run recette:restore-test` : `pg_dump` (format custom), `pg_restore` dans une base temporaire, comparaison table par table (lignes et empreintes d'identifiants), contraintes, migrations, journal d'audit toujours en ajout seul, comptes de connexion complets ; rapport daté dans `docs/recette/`. Premier essai : **conforme**, 4 694 lignes, restauration + contrôles en 1,5 s pour un objectif de 4 h. Mesuré sur la machine locale, pas sur l'hébergement cible |
+| Audit de sécurité | Fait (interne) | OWASP Top 10 revu dans le code (`docs/RECETTE_SECURITE.md`) ; requêtes SQL brutes inspectées (5, toutes paramétrées) ; appels sortants (curseur Graph borné à `graph.microsoft.com`) ; fichiers d'import ; limitation de débit |
+| Dépendances | Fait | `npm audit fix` : `prisma` 7.10.1, `mysql2` 3.24.x ; production : **0 vulnérabilité**. Restent 5 alertes hautes dans `eslint-config-next` (outil de lint) : le correctif proposé est un retour à la version 14, refusé |
+| Limitation de débit | Corrigé | Le webhook Microsoft public n'en avait pas : 600 requêtes/min par IP, réponse 429 au-delà. Les autres points d'entrée étaient déjà protégés |
+| En-têtes et CSP | Fait avec écart | CSP complète (`default-src 'self'`, `connect-src 'self'`, `frame-ancestors 'none'`, `base-uri`, `object-src 'none'`, `form-action`), figée par `tests/unit/security-headers.test.ts`. **`script-src` garde `'unsafe-inline'`** |
+| Suivi des anomalies | Ouvert | Registre dans `docs/RECETTE.md` : A-02 et A-03 corrigées, A-01 écart accepté ; A-04 à A-07 ouvertes |
+
+**Écart sur la CSP (A-01)** : un nonce impose un rendu 100 % dynamique et est incompatible avec le rendu partiel (`cacheComponents`) de l'application (documentation de Next 16). L'option SRI, essayée dans le navigateur en production, ne couvre pas les scripts en ligne de Next : la page ne s'hydrate plus. La CSP n'empêche donc pas un script injecté en ligne ; elle interdit tout chargement, connexion ou formulaire vers un autre hôte. La parade reste l'échappement de React (aucun `dangerouslySetInnerHTML`).
+
+**Limites connues** : le procès-verbal n'est pas signé (modèle vierge) ; l'exécution manuelle des scénarios par un représentant métier reste à faire ; les graphiques n'ont pas été vérifiés visuellement après connexion sous la nouvelle CSP (A-06) ; le limiteur de débit est en mémoire (par instance) et se fie à `X-Forwarded-For` (le proxy de production doit l'écraser) ; la décompression d'un `.xlsx` très compressible n'est pas bornée (risque à éprouver) ; pas d'authentification multifacteur ; aucun test d'accessibilité ni d'intrusion externe.
 
 
 ---
