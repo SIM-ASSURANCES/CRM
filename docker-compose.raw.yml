@@ -1,0 +1,115 @@
+# CRM SIM Assurances CI : fichier « Raw » pour Dokploy (Compose → Provider : Raw).
+# Application + base PostgreSQL. Voir docs/DEPLOIEMENT.md.
+#
+# Variables à renseigner dans l'onglet Environment de Dokploy (aucun secret n'est écrit dans ce fichier) :
+#   POSTGRES_PASSWORD     mot de passe de la base (obligatoire)
+#   BETTER_AUTH_SECRET    au moins 32 caractères : openssl rand -base64 32 (obligatoire)
+#   BETTER_AUTH_URL       https://crm.mysimassurances.com (sans slash final)
+#   CRON_SECRET           recommandée : openssl rand -base64 32
+#   POSTGRES_USER, POSTGRES_DB   facultatives (crm / crm par défaut)
+#   MS_CLIENT_ID, MS_CLIENT_SECRET, MS_TENANT_ID, TOKEN_ENCRYPTION_KEY   intégration Microsoft 365 (facultatives)
+#   RUN_MIGRATIONS, LOG_LEVEL                                           facultatives
+# Ne pas laisser une variable vide (ex. « CRON_SECRET= ») : une valeur vide est refusée au démarrage. Supprimer la ligne.
+#
+# Domaine crm.mysimassurances.com : routage Traefik déjà écrit dans les « labels » du service app (ne rien ajouter dans
+# l'onglet Domains). Pour changer de domaine, modifier les deux lignes Host(`...`) et BETTER_AUTH_URL.
+# Image privée : exécuter une fois sur le serveur  docker login ghcr.io  (utilisateur GitHub + jeton read:packages),
+# ou rendre le paquet public dans GitHub.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-crm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD est obligatoire}
+      POSTGRES_DB: ${POSTGRES_DB:-crm}
+    volumes:
+      - crm_pgdata_v2:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    image: ghcr.io/sim-assurances/crm:v1
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    # Reprend les autres variables saisies dans Dokploy (CRON_SECRET, MS_*, LOG_LEVEL…) ; absentes = non transmises.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-crm}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-crm}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET est obligatoire (32 caractères minimum)}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-https://crm.mysimassurances.com}
+      # Premier administrateur, créé AUTOMATIQUEMENT au démarrage s'il n'existe pas (sans effet s'il existe déjà).
+      # SEED_ADMIN_PASSWORD vide (défaut) : un mot de passe temporaire aléatoire est généré et affiché UNE SEULE FOIS
+      # dans les journaux du conteneur « app » au premier démarrage. Renseigné : ce mot de passe temporaire est utilisé.
+      # Dans les deux cas, le changement du mot de passe est exigé à la première connexion.
+      SEED_ADMIN_EMAIL: admin@crm.local
+      SEED_ADMIN_NAME: Administrateur CRM
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+    expose:
+      - "3000"
+    # Routage Traefik (Dokploy) écrit ici : le domaine fonctionne SANS passer par l'onglet Domains. Ne pas ajouter ce
+    # même domaine dans l'onglet Domains en plus (les deux se contrediraient).
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      # HTTPS (certificat Let's Encrypt)
+      - traefik.http.routers.crm.rule=Host(`crm.mysimassurances.com`)
+      - traefik.http.routers.crm.entrypoints=websecure
+      - traefik.http.routers.crm.tls.certresolver=letsencrypt
+      - traefik.http.routers.crm.service=crm
+      - traefik.http.services.crm.loadbalancer.server.port=3000
+      # HTTP -> redirection vers HTTPS
+      - traefik.http.routers.crm-http.rule=Host(`crm.mysimassurances.com`)
+      - traefik.http.routers.crm-http.entrypoints=web
+      - traefik.http.routers.crm-http.middlewares=crm-https
+      - traefik.http.middlewares.crm-https.redirectscheme.scheme=https
+    networks:
+      - default
+      - dokploy-network
+
+  # Planificateur intégré : appelle les tâches planifiées de l'application à l'intérieur du réseau du compose (rien à
+  # configurer dans Dokploy). Relances automatiques et nettoyage toutes les heures ; synchronisations Microsoft toutes les
+  # 15 minutes (seulement si MS_CLIENT_ID est défini). Inactif sans CRON_SECRET.
+  scheduler:
+    image: curlimages/curl:8.11.1
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      CRON_SECRET: ${CRON_SECRET:-}
+      MS_CLIENT_ID: ${MS_CLIENT_ID:-}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -z "$$CRON_SECRET" ]; then
+          echo "CRON_SECRET absent : taches planifiees desactivees."
+          while true; do sleep 86400; done
+        fi
+        echo "Planificateur actif : synchronisations toutes les 15 min, relances toutes les heures."
+        tick=0
+        while true; do
+          sleep 900
+          tick=$$((tick + 1))
+          if [ -n "$$MS_CLIENT_ID" ]; then
+            curl -fsS -m 300 -X POST -H "Authorization: Bearer $$CRON_SECRET" http://app:3000/api/jobs/integrations > /dev/null || echo "Echec : synchronisations"
+          fi
+          if [ $$((tick % 4)) -eq 0 ]; then
+            curl -fsS -m 300 -X POST -H "Authorization: Bearer $$CRON_SECRET" http://app:3000/api/jobs/automations > /dev/null || echo "Echec : relances"
+          fi
+        done
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  crm_pgdata_v2:

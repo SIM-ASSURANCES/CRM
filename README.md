@@ -178,13 +178,15 @@ Code dans `src/features/audit/` (consultation, export) et `src/features/imports/
 
 ## Déploiement (Docker, Dokploy)
 
-Image `ghcr.io/sim-assurances/crm:v0` (`Dockerfile`, `docker-entrypoint.sh`), publiée sur `https://crm.mysimssurances.com`.
-Le conteneur applique les migrations au démarrage et expose `GET /api/health`. Variables d'environnement, création du
-premier administrateur, tâches planifiées, sauvegarde et retour arrière : voir [docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md).
+Image `ghcr.io/sim-assurances/crm:v1` (`Dockerfile`, `docker-entrypoint.sh`), publiée sur `https://crm.mysimassurances.com`
+avec `docker-compose.raw.yml` (Dokploy → Compose → Raw). Au déploiement, tout est automatique : migrations, création du
+premier administrateur (mot de passe temporaire généré et affiché une fois dans les journaux s'il n'est pas fourni),
+domaine HTTPS et tâches planifiées. Variables d'environnement, mise à jour, sauvegarde et retour arrière : voir
+[docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md).
 
 ```bash
-docker build -t ghcr.io/sim-assurances/crm:v0 .
-docker push ghcr.io/sim-assurances/crm:v0
+docker build -t ghcr.io/sim-assurances/crm:v1 .
+docker push ghcr.io/sim-assurances/crm:v1
 ```
 
 ## Migration de données (phase 7)
