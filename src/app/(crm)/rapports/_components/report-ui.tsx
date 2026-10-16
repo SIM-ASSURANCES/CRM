@@ -7,11 +7,32 @@ import { cn } from "@/lib/utils";
 
 // Éléments d'affichage communs aux rapports. Aucun calcul : les chiffres arrivent tels que le service les a produits.
 
-export function Tile({ label, value, note, tone = "default" }: { label: string; value: string; note?: string; tone?: "default" | "good" | "bad" }) {
+export function Tile({
+  label,
+  value,
+  note,
+  tone = "default",
+  compact = false,
+}: {
+  label: string;
+  value: string;
+  note?: string;
+  tone?: "default" | "good" | "bad";
+  /** Chiffre à 14 px (page des prévisions) au lieu du grand format par défaut. */
+  compact?: boolean;
+}) {
   return (
     <article className="rounded-2xl border border-line bg-white p-5 shadow-sm">
       <h3 className="text-sm font-medium text-muted">{label}</h3>
-      <p className={cn("mt-2 text-2xl font-bold", tone === "good" ? "text-emerald-700" : tone === "bad" ? "text-danger" : "text-ink")}>{value}</p>
+      <p
+        className={cn(
+          "mt-2 font-bold",
+          compact ? "text-[14px]" : "text-2xl",
+          tone === "good" ? "text-emerald-700" : tone === "bad" ? "text-danger" : "text-ink",
+        )}
+      >
+        {value}
+      </p>
       {note && <p className="mt-1 text-xs text-muted">{note}</p>}
     </article>
   );

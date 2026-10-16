@@ -385,6 +385,40 @@ describe.skipIf(!hasDb)("opportunités et conversion (PostgreSQL)", () => {
       expect(board.columns.find((c) => c.stage === 20)!.cards[0].overdue).toBe(true);
     });
 
+    it("calcule l'ancienneté dans l'étape depuis le dernier changement d'étape", async () => {
+      const { id } = await opp.createOpportunity(a, oppInput({ stage: 20 }));
+      const moved = await opp.moveStage(a, { id, version: 1, targetStage: 40 as const, criteriaConfirmed: true, wonConfirmed: false });
+      expect(moved).toMatchObject({ stage: 40, version: 2 });
+
+      const inTenDays = new Date(Date.now() + 10 * 86_400_000 + 3_600_000);
+      const card = (await opp.listBoard(a, {}, inTenDays)).columns.find((c) => c.stage === 40)!.cards[0];
+      expect(card.daysInStage).toBe(10);
+      expect((await opp.listBoard(a)).columns.find((c) => c.stage === 40)!.cards[0].daysInStage).toBe(0);
+    });
+
+    it("affiche le contact principal du dossier avec ses coordonnées, le principal avant les autres", async () => {
+      const { id } = await opp.createOpportunity(a, oppInput());
+      const base = { status: "active" as const, forceDuplicate: false, accountId };
+      const other = await con.createContact(a, { ...base, firstName: "Autre", lastName: `Contact${uniq()}` });
+      const main = await con.createContact(a, {
+        ...base,
+        firstName: "Awa",
+        lastName: `Principal${uniq()}`,
+        email: "awa.principal@exemple.ci",
+        phone: "+2250707353673",
+      });
+      await opp.addContact(a, { opportunityId: id, contactId: other.id, isMain: false });
+      await opp.addContact(a, { opportunityId: id, contactId: main.id, isMain: true });
+
+      const card = (await opp.listBoard(a)).columns.find((c) => c.stage === 20)!.cards[0];
+      expect(card.contact).toEqual({ name: expect.stringMatching(/^Awa Principal/), phone: "+2250707353673", email: "awa.principal@exemple.ci" });
+    });
+
+    it("renvoie un contact nul quand aucun contact n'est rattaché", async () => {
+      await opp.createOpportunity(a, oppInput());
+      expect((await opp.listBoard(a)).columns.find((c) => c.stage === 20)!.cards[0].contact).toBeNull();
+    });
+
     it("liste les opportunités clôturées avec la pagination", async () => {
       const x = await opp.createOpportunity(a, oppInput());
       await opp.createOpportunity(a, oppInput());

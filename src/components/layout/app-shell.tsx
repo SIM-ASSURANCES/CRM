@@ -39,7 +39,9 @@ export function AppShell({ user, pendingResetRequests = 0, unreadNotifications =
           user={user}
           notification={{ count: total, href: "/notifications", label: parts.length > 0 ? parts.join(", ") : "Aucune notification" }}
         />
-        <main id="contenu" className="flex-1 overflow-y-auto p-6 md:p-8">
+        {/* `relative` : les éléments en position absolue des pages (textes `sr-only`, légendes de tableau…) restent DANS cette
+            zone défilante. Sans cela ils s'échappent et ajoutent une barre de défilement à la page entière. */}
+        <main id="contenu" className="relative flex-1 overflow-y-auto p-6 md:p-8">
           {children}
         </main>
       </div>

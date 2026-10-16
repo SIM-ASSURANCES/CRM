@@ -50,8 +50,16 @@ export type OpportunityCard = {
 
 export type Totals = { count: number; gross: number; weighted: number };
 
+/** Carte du tableau Kanban : la carte + ce qui aide à agir sans ouvrir la fiche (ancienneté dans l'étape, contact). */
+export type BoardCard = OpportunityCard & {
+  /** Jours écoulés depuis l'entrée dans l'étape actuelle (création ou dernier changement d'étape). */
+  daysInStage: number;
+  /** Contact principal du dossier (ou le premier rattaché) ; coordonnées seulement si l'utilisateur peut lire les contacts. */
+  contact: { name: string; phone: string | null; email: string | null } | null;
+};
+
 export type BoardData = {
-  columns: { stage: OpenStage; cards: OpportunityCard[]; totals: Totals }[];
+  columns: { stage: OpenStage; cards: BoardCard[]; totals: Totals }[];
   /** Pipeline ouvert : brut et pondéré (CDC 5.3 : « distinguer montant brut, montant pondéré et revenu signé »). */
   open: Totals;
   /** Revenu signé : opportunités gagnées depuis le début de l'année en cours. */
@@ -163,7 +171,48 @@ export async function listBoard(
   ]);
 
   const truncated = rows.length > LIMIT;
-  const cards = rows.slice(0, LIMIT).map((row) => toCard(row, now));
+  const visibleRows = rows.slice(0, LIMIT);
+  const ids = visibleRows.map((row) => row.id);
+
+  // Deux requêtes groupées pour tout le tableau (jamais une par carte) : date d'entrée dans l'étape et contact principal.
+  const showContact = can(user.role, "contact:read");
+  const [stageEntries, contactLinks] = await Promise.all([
+    db.opportunityEvent.groupBy({
+      by: ["opportunityId"],
+      where: { opportunityId: { in: ids }, type: { in: ["created", "stage_changed"] } },
+      _max: { occurredAt: true },
+    }),
+    showContact
+      ? db.opportunityContact.findMany({
+          where: { opportunityId: { in: ids } },
+          select: {
+            opportunityId: true,
+            contact: { select: { firstName: true, lastName: true, phone: true, email: true } },
+          },
+          orderBy: [{ isMain: "desc" }, { createdAt: "asc" }],
+        })
+      : Promise.resolve([]),
+  ]);
+  const enteredAt = new Map(stageEntries.map((entry) => [entry.opportunityId, entry._max.occurredAt]));
+  const mainContact = new Map<string, BoardCard["contact"]>();
+  for (const link of contactLinks) {
+    // Triés « principal d'abord » : le premier lien rencontré est celui à afficher.
+    if (mainContact.has(link.opportunityId)) continue;
+    mainContact.set(link.opportunityId, {
+      name: `${link.contact.firstName} ${link.contact.lastName}`,
+      phone: link.contact.phone,
+      email: link.contact.email,
+    });
+  }
+
+  const cards: BoardCard[] = visibleRows.map((row) => {
+    const since = enteredAt.get(row.id) ?? row.createdAt;
+    return {
+      ...toCard(row, now),
+      daysInStage: Math.max(Math.floor((now.getTime() - since.getTime()) / 86_400_000), 0),
+      contact: mainContact.get(row.id) ?? null,
+    };
+  });
 
   return {
     columns: OPEN_STAGES.map((stage) => {
@@ -457,7 +506,10 @@ export async function updateOpportunity(user: CurrentUser, input: UpdateOpportun
 }
 
 /** Changement d'étape (CDC A.8 : « critères de sortie, historique, mise à jour forecast »). 100 % = gagné. */
-export async function moveStage(user: CurrentUser, input: MoveStageInput): Promise<{ id: string; stage: number; status: string }> {
+export async function moveStage(
+  user: CurrentUser,
+  input: MoveStageInput,
+): Promise<{ id: string; stage: number; status: string; version: number }> {
   assertCan(user, "opportunity:write");
   const thresholds = await getThresholds();
 
@@ -513,7 +565,7 @@ export async function moveStage(user: CurrentUser, input: MoveStageInput): Promi
       },
       tx,
     );
-    return { id: existing.id, stage: input.targetStage, status: won ? "won" : "open" };
+    return { id: existing.id, stage: input.targetStage, status: won ? "won" : "open", version: input.version + 1 };
   });
 }
 

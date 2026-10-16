@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, type ComponentProps } from "react";
 import { ForecastChart } from "@/app/(crm)/rapports/_components/forecast-chart";
-import { ExportLinks, GapCells, KpiDictionary, rateLabel, ReportFilters, TH, Tile } from "@/app/(crm)/rapports/_components/report-ui";
+import { ExportLinks, GapCells, KpiDictionary, rateLabel, ReportFilters, TH, Tile as ReportTile } from "@/app/(crm)/rapports/_components/report-ui";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { SelectField } from "@/components/ui/select";
@@ -25,6 +25,11 @@ export default function ForecastPage({ searchParams }: { searchParams: SearchPar
       <ForecastContent searchParams={searchParams} />
     </Suspense>
   );
+}
+
+/** Cartes d'indicateurs de la page : chiffres à 14 px. */
+function Tile(props: Omit<ComponentProps<typeof ReportTile>, "compact">) {
+  return <ReportTile compact {...props} />;
 }
 
 function TotalsCells({ totals }: { totals: Totals }) {

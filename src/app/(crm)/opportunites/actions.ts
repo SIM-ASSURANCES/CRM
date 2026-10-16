@@ -112,6 +112,45 @@ export async function moveStageAction(_previous: OpportunityFormState, formData:
   redirect(withParams(returnTo, { ok: result.status === "won" ? "won" : "moved", t: String(Date.now()) }));
 }
 
+export type QuickMoveResult =
+  | { ok: true; stage: number; version: number }
+  // needsDetails : le serveur demande une information (critère, produit, montant) : le tableau rouvre la boîte de dialogue.
+  | { ok: false; error: string; needsDetails: boolean };
+
+/**
+ * Déplacement « à la HubSpot » depuis le tableau : appelé directement par le navigateur, sans redirection, pour que la carte
+ * change de colonne tout de suite. Mêmes règles que `moveStageAction` (schéma, service) : le gain (100 %) reste réservé à
+ * la boîte de dialogue, car `wonConfirmed` n'est jamais fourni ici.
+ */
+export async function quickMoveStageAction(input: {
+  id: string;
+  version: number;
+  targetStage: number;
+  /** Retour à une étape déjà validée (annulation d'un recul) : le critère est réputé rempli. */
+  criteriaConfirmed?: boolean;
+}): Promise<QuickMoveResult> {
+  const user = await requireUser();
+
+  const parsed = moveStageSchema.safeParse({
+    id: input.id,
+    version: input.version,
+    targetStage: input.targetStage,
+    criteriaConfirmed: input.criteriaConfirmed === true,
+    wonConfirmed: false,
+  });
+  if (!parsed.success) return { ok: false, error: "Déplacement invalide.", needsDetails: false };
+
+  try {
+    const result = await moveStage(user, parsed.data);
+    return { ok: true, stage: result.stage, version: result.version };
+  } catch (error) {
+    const state = failure(error);
+    const fields = state.fieldErrors ?? {};
+    const needsDetails = ["criteriaConfirmed", "wonConfirmed", "productId", "amount"].some((name) => name in fields);
+    return { ok: false, error: state.error ?? "Déplacement impossible.", needsDetails };
+  }
+}
+
 export async function markOpportunityLostAction(_previous: OpportunityFormState, formData: FormData): Promise<OpportunityFormState> {
   const user = await requireUser();
   const returnTo = safeRedirectPath(formData.get("returnTo"), "/opportunites");

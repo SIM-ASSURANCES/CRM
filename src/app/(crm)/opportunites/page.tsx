@@ -179,6 +179,8 @@ async function OpportunitiesContent({ searchParams }: { searchParams: SearchPara
             key={first(params.t) ?? "board"}
             board={board}
             canWrite={canWrite}
+            canLogActivity={can(user.role, "activity:write")}
+            canCreateTask={can(user.role, "task:write")}
             qualifiedAbove={thresholds.qualifiedAbove}
             returnTo={returnTo}
           />

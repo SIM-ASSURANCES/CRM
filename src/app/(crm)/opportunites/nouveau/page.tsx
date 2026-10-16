@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { listAccountOptions, listAssignableOwners } from "@/features/accounts/service";
 import { listActiveProducts } from "@/features/leads/service";
+import { isOpenStage } from "@/features/opportunities/config";
 import { can } from "@/lib/auth/permissions";
 import { requirePermissionOrNotFound } from "@/lib/auth/session";
 
@@ -22,7 +23,11 @@ export default function NewOpportunityPage({ searchParams }: { searchParams: Sea
 
 async function NewOpportunityContent({ searchParams }: { searchParams: SearchParams }) {
   const user = await requirePermissionOrNotFound("opportunity:write");
-  const accountParam = (await searchParams).compte;
+  const params = await searchParams;
+  const accountParam = params.compte;
+  // « + » en tête de colonne du Kanban : l'opportunité démarre dans cette étape (une valeur hors liste est ignorée).
+  const stageParam = typeof params.etape === "string" ? Number(params.etape) : NaN;
+  const stage = isOpenStage(stageParam) ? String(stageParam) : "10";
 
   const [accounts, products, owners] = await Promise.all([
     listAccountOptions(user),
@@ -45,7 +50,7 @@ async function NewOpportunityContent({ searchParams }: { searchParams: SearchPar
           accounts={accounts}
           products={products}
           owners={owners}
-          initial={{ accountId, stage: "10", revenuePeriod: "annual", ownerUserId: owners ? user.id : "" }}
+          initial={{ accountId, stage, revenuePeriod: "annual", ownerUserId: owners ? user.id : "" }}
         />
       </div>
     </div>
