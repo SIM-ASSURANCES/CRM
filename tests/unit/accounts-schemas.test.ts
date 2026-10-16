@@ -47,7 +47,7 @@ describe("createAccountSchema", () => {
       employeeCount: 120,
       revenueAmount: 1_250_000_000,
       revenueYear: 2025,
-      phone: "0707353673",
+      phone: "+2250707353673",
       emailDomain: "aaci.ci",
       country: "CI",
       parentAccountId: undefined,
@@ -80,7 +80,7 @@ describe("createAccountSchema", () => {
     expect(accountMessages({ ...validAccount, employeeCount: "-3" })).toContain("Effectif invalide.");
     expect(accountMessages({ ...validAccount, revenueYear: "1800" })).toContain("Année invalide.");
     expect(accountMessages({ ...validAccount, emailDomain: "pas un domaine" })).toContain("Domaine invalide (exemple : client.ci).");
-    expect(accountMessages({ ...validAccount, phone: "123" })).toContain("Numéro de téléphone invalide (8 à 15 chiffres).");
+    expect(accountMessages({ ...validAccount, phone: "123" })).toContain("Numéro de téléphone invalide : 10 chiffres pour la Côte d'Ivoire (exemple : 01 02 03 04 05), ou un numéro international en +.");
     expect(accountMessages({ ...validAccount, revenueAmount: "-1" })).toContain("Le montant ne peut pas être négatif.");
   });
 
@@ -104,7 +104,7 @@ describe("createContactSchema", () => {
     const result = createContactSchema.safeParse({ ...valid, accountId: "", jobTitle: "" });
     expect(result.success).toBe(true);
     if (!result.success) return;
-    expect(result.data).toMatchObject({ firstName: "Marie", email: "marie@client.ci", phone: "0707353673", accountId: undefined });
+    expect(result.data).toMatchObject({ firstName: "Marie", email: "marie@client.ci", phone: "+2250707353673", accountId: undefined });
   });
 
   it("exige le prénom et le nom", () => {

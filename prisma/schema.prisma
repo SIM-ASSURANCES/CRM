@@ -33,26 +33,27 @@ model User {
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  team               Team?                  @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
-  managedTeams       Team[]                 @relation("TeamManager")
+  team               Team?                   @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
+  managedTeams       Team[]                  @relation("TeamManager")
   sessions           Session[]
   accounts           Account[]
   auditLogs          AuditLog[]
-  resetRequests      PasswordResetRequest[] @relation("ResetHandledBy")
-  leads              Lead[]                 @relation("LeadOwner")
+  resetRequests      PasswordResetRequest[]  @relation("ResetHandledBy")
+  leads              Lead[]                  @relation("LeadOwner")
   leadEvents         LeadEvent[]
-  accountsOwned      CrmAccount[]           @relation("AccountOwner")
-  contactsOwned      Contact[]              @relation("ContactOwner")
-  opportunitiesOwned Opportunity[]          @relation("OpportunityOwner")
+  accountsOwned      CrmAccount[]            @relation("AccountOwner")
+  contactsOwned      Contact[]               @relation("ContactOwner")
+  opportunitiesOwned Opportunity[]           @relation("OpportunityOwner")
   opportunityEvents  OpportunityEvent[]
-  activitiesAuthored Activity[]             @relation("ActivityAuthor")
-  tasksAssigned      Task[]                 @relation("TaskAssignee")
-  tasksCreated       Task[]                 @relation("TaskCreator")
+  activitiesAuthored Activity[]              @relation("ActivityAuthor")
+  tasksAssigned      Task[]                  @relation("TaskAssignee")
+  tasksCreated       Task[]                  @relation("TaskCreator")
   notifications      Notification[]
-  importBatches      ImportBatch[]          @relation("ImportCreator")
+  importBatches      ImportBatch[]           @relation("ImportCreator")
+  importsValidated   ImportBatch[]           @relation("ImportValidator")
   integrations       IntegrationConnection[]
   syncEvents         SyncEvent[]
-  salesTargets       SalesTarget[]          @relation("TargetOwner")
+  salesTargets       SalesTarget[]           @relation("TargetOwner")
 
   @@index([teamId])
   @@index([role])
@@ -495,28 +496,28 @@ model OpportunityEvent {
 // Activité journalisée (CDC 6.1) : appel, e-mail, rendez-vous… Liée à un compte et, selon le cas, à un contact et
 // une opportunité. L'origine distingue la saisie utilisateur, la synchronisation et l'automatisation (CDC 3.4).
 model Activity {
-  id             String    @id @default(uuid(7)) @db.Uuid
+  id               String    @id @default(uuid(7)) @db.Uuid
   // call_in | call_out | email | meeting | video | note | proposal_sent | contract_step
-  type           String
-  subject        String
-  occurredAt     DateTime  @map("occurred_at") @db.Timestamptz(3)
-  authorUserId   String    @map("author_user_id") @db.Uuid
-  accountId      String    @map("account_id") @db.Uuid
-  contactId      String?   @map("contact_id") @db.Uuid
-  opportunityId  String?   @map("opportunity_id") @db.Uuid
-  outcome        String?
-  nextAction     String?   @map("next_action")
-  nextActionDate DateTime? @map("next_action_date") @db.Date
+  type             String
+  subject          String
+  occurredAt       DateTime  @map("occurred_at") @db.Timestamptz(3)
+  authorUserId     String    @map("author_user_id") @db.Uuid
+  accountId        String    @map("account_id") @db.Uuid
+  contactId        String?   @map("contact_id") @db.Uuid
+  opportunityId    String?   @map("opportunity_id") @db.Uuid
+  outcome          String?
+  nextAction       String?   @map("next_action")
+  nextActionDate   DateTime? @map("next_action_date") @db.Date
   // user | sync | automation
-  origin         String    @default("user")
+  origin           String    @default("user")
   // Activité issue d'une synchronisation : fournisseur, identifiant technique du message (dédoublonnage) et lien
   // vers l'élément d'origine. Un message vu par plusieurs comptes donne une activité par compte.
-  externalProvider String? @map("external_provider")
-  externalId       String? @map("external_id")
-  externalUrl      String? @map("external_url")
-  version        Int       @default(1)
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  externalProvider String?   @map("external_provider")
+  externalId       String?   @map("external_id")
+  externalUrl      String?   @map("external_url")
+  version          Int       @default(1)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   author      User         @relation("ActivityAuthor", fields: [authorUserId], references: [id], onDelete: Restrict)
   account     CrmAccount   @relation(fields: [accountId], references: [id], onDelete: Restrict)
@@ -630,38 +631,38 @@ model Notification {
 // Connexion d'un utilisateur à un fournisseur externe (CDC 7). Les jetons ne sont JAMAIS stockés en clair : ils sont
 // chiffrés (AES-256-GCM) avec une clé qui ne figure pas en base. Un utilisateur a au plus une connexion par fournisseur.
 model IntegrationConnection {
-  id                   String    @id @default(uuid(7)) @db.Uuid
-  userId               String    @map("user_id") @db.Uuid
+  id                    String    @id @default(uuid(7)) @db.Uuid
+  userId                String    @map("user_id") @db.Uuid
   // microsoft
-  provider             String
+  provider              String
   // active | needs_reconnect | revoked
-  status               String    @default("active")
+  status                String    @default("active")
   // Adresse du compte connecté (affichage, et exclusion des propres adresses lors du rapprochement).
-  accountEmail         String?   @map("account_email")
-  externalUserId       String?   @map("external_user_id")
+  accountEmail          String?   @map("account_email")
+  externalUserId        String?   @map("external_user_id")
   // Droits accordés (moindre privilège : lecture des en-têtes de messages seulement).
-  scopes               String
-  accessTokenEnc       String?   @map("access_token_enc")
-  refreshTokenEnc      String?   @map("refresh_token_enc")
-  accessTokenExpiresAt DateTime? @map("access_token_expires_at") @db.Timestamptz(3)
+  scopes                String
+  accessTokenEnc        String?   @map("access_token_enc")
+  refreshTokenEnc       String?   @map("refresh_token_enc")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at") @db.Timestamptz(3)
   // Curseurs de synchronisation incrémentale par dossier (« delta »).
-  cursors              Json      @default("{}")
+  cursors               Json      @default("{}")
   // Date à partir de laquelle les messages sont importés (première synchronisation bornée).
-  syncSince            DateTime  @map("sync_since") @db.Timestamptz(3)
+  syncSince             DateTime  @map("sync_since") @db.Timestamptz(3)
   // Verrou : une seule synchronisation à la fois par connexion.
-  syncingSince         DateTime? @map("syncing_since") @db.Timestamptz(3)
+  syncingSince          DateTime? @map("syncing_since") @db.Timestamptz(3)
   // Demandée par une notification du fournisseur (webhook) : traitée par la prochaine exécution.
-  syncRequestedAt      DateTime? @map("sync_requested_at") @db.Timestamptz(3)
-  lastSyncAt           DateTime? @map("last_sync_at") @db.Timestamptz(3)
-  lastSuccessAt        DateTime? @map("last_success_at") @db.Timestamptz(3)
-  lastError            String?   @map("last_error")
+  syncRequestedAt       DateTime? @map("sync_requested_at") @db.Timestamptz(3)
+  lastSyncAt            DateTime? @map("last_sync_at") @db.Timestamptz(3)
+  lastSuccessAt         DateTime? @map("last_success_at") @db.Timestamptz(3)
+  lastError             String?   @map("last_error")
   // Abonnement aux notifications du fournisseur (webhooks) et secret de vérification des appels reçus.
-  subscriptionId       String?   @map("subscription_id")
+  subscriptionId        String?   @map("subscription_id")
   subscriptionExpiresAt DateTime? @map("subscription_expires_at") @db.Timestamptz(3)
-  webhookSecret        String?   @map("webhook_secret")
-  consentedAt          DateTime  @map("consented_at") @db.Timestamptz(3)
-  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  webhookSecret         String?   @map("webhook_secret")
+  consentedAt           DateTime  @map("consented_at") @db.Timestamptz(3)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   events SyncEvent[]
@@ -717,32 +718,41 @@ model OAuthState {
 // Import initial de données (CDC 11 et 14) : un lot = un fichier déposé, avec son mapping, son rapport de qualité et
 // ses lignes. Rien n'est écrit dans les comptes ou contacts avant la confirmation explicite de l'administrateur.
 model ImportBatch {
-  id              String    @id @default(uuid(7)) @db.Uuid
-  // accounts | contacts
-  entity          String
-  filename        String
-  // uploaded | analyzed | importing | imported | cancelled
-  status          String    @default("uploaded")
+  id                String    @id @default(uuid(7)) @db.Uuid
+  // accounts | contacts | leads
+  entity            String
+  filename          String
+  // uploaded | analyzed | importing | imported | validated | cancelled
+  status            String    @default("uploaded")
   // En-têtes du fichier, dans l'ordre des colonnes.
-  headers         Json
+  headers           Json
   // Champ du CRM → nom de la colonne du fichier.
-  mapping         Json?
+  mapping           Json?
   // Valeurs par défaut (responsable, secteur, statut, pays…).
-  defaults        Json?
+  defaults          Json?
   // Rapport de qualité : rejets, doublons, champs manquants.
-  report          Json?
-  totalRows       Int       @map("total_rows")
-  validRows       Int       @default(0) @map("valid_rows")
-  rejectedRows    Int       @default(0) @map("rejected_rows")
-  duplicateRows   Int       @default(0) @map("duplicate_rows")
-  importedRows    Int       @default(0) @map("imported_rows")
-  createdByUserId String    @map("created_by_user_id") @db.Uuid
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  analyzedAt      DateTime? @map("analyzed_at") @db.Timestamptz(3)
-  importedAt      DateTime? @map("imported_at") @db.Timestamptz(3)
+  report            Json?
+  totalRows         Int       @map("total_rows")
+  validRows         Int       @default(0) @map("valid_rows")
+  rejectedRows      Int       @default(0) @map("rejected_rows")
+  duplicateRows     Int       @default(0) @map("duplicate_rows")
+  importedRows      Int       @default(0) @map("imported_rows")
+  // Correspondances de valeurs choisies par l'administrateur pour les valeurs que le CRM ne reconnaît pas :
+  // { sector: { "<valeur du fichier, normalisée>": "<secteur du CRM>" }, product: { … "<code du produit>" } }.
+  valueMap          Json?     @map("value_map")
+  // Inventaire de la source (volumes, taux de remplissage, valeurs fréquentes), calculé au dépôt du fichier.
+  profile           Json?
+  createdByUserId   String    @map("created_by_user_id") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  analyzedAt        DateTime? @map("analyzed_at") @db.Timestamptz(3)
+  importedAt        DateTime? @map("imported_at") @db.Timestamptz(3)
+  // Validation du rapprochement : la source (cellules d'origine) est conservée jusque-là, puis effacée.
+  validatedAt       DateTime? @map("validated_at") @db.Timestamptz(3)
+  validatedByUserId String?   @map("validated_by_user_id") @db.Uuid
 
-  creator User        @relation("ImportCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  rows    ImportRow[]
+  creator   User        @relation("ImportCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  validator User?       @relation("ImportValidator", fields: [validatedByUserId], references: [id], onDelete: Restrict)
+  rows      ImportRow[]
 
   @@index([createdAt])
   @@map("import_batches")
@@ -753,7 +763,8 @@ model ImportRow {
   batchId         String  @map("batch_id") @db.Uuid
   // Numéro de la ligne dans le fichier (l'en-tête est la ligne 1).
   rowNumber       Int     @map("row_number")
-  // Cellules d'origine, alignées sur les en-têtes. Vidé une fois la ligne importée (minimisation des données).
+  // Cellules d'origine, alignées sur les en-têtes. CONSERVÉES jusqu'à la validation du rapprochement (la source sert à
+  // vérifier la migration), puis effacées (minimisation des données).
   raw             Json
   // pending | valid | rejected | duplicate | imported
   status          String  @default("pending")
@@ -761,6 +772,8 @@ model ImportRow {
   parsed          Json?
   // Motifs de rejet (liste de messages).
   errors          Json?
+  // Anomalies qui n'empêchent pas l'import (téléphone à 8 chiffres ignoré, par exemple) : à corriger dans la source.
+  warnings        Json?
   duplicateOf     String? @map("duplicate_of")
   // Compte ou contact créé par cette ligne : traçabilité de l'import.
   createdEntityId String? @map("created_entity_id") @db.Uuid

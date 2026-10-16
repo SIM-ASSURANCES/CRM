@@ -31,6 +31,7 @@ describe("analyse d'un fichier de comptes", () => {
     owners: new Map([["commercial@crm.local", OTHER_OWNER]]),
     existingByIdentifier: new Map(),
     existingByName: new Map(),
+    valueMap: {},
     ...over,
   });
   const row = (rowNumber: number, cells: Partial<Record<string, string>>): SourceRow => ({
@@ -60,7 +61,7 @@ describe("analyse d'un fichier de comptes", () => {
       status: "client",
       country: "CI",
       employeeCount: 1250,
-      phone: "0102030405",
+      phone: "+2250102030405",
       emailDomain: "alpha.ci",
       ownerUserId: OWNER,
     });
@@ -76,9 +77,11 @@ describe("analyse d'un fichier de comptes", () => {
         expect.stringContaining("Statut : « VIP »"),
         expect.stringContaining("Pays : « Atlantide »"),
         expect.stringContaining("Raison sociale"),
-        expect.stringContaining("Téléphone"),
       ]),
     );
+    // Un téléphone illisible n'est plus un motif de rejet (champ facultatif) : il est ignoré et signalé en avertissement.
+    expect(result.errors.some((error) => error.startsWith("Téléphone"))).toBe(false);
+    expect(result.warnings).toEqual([expect.stringContaining("Téléphone : « abc » non importé")]);
     // Le secteur n'est pas signalé deux fois (une fois par la reconnaissance, une fois par le schéma).
     expect(result.errors.filter((error) => error.startsWith("Secteur"))).toHaveLength(1);
   });
@@ -229,7 +232,9 @@ describe("analyse d'un fichier de contacts", () => {
   it("valide prénom, nom, e-mail et téléphone avec les règles des formulaires", () => {
     const [result] = run([row(2, { Prénom: "", Nom: "Koné", Entreprise: "Béta", "E-mail": "pas-un-mail", Tel: "12" })]).values();
     expect(result.status).toBe("rejected");
-    expect(result.errors.length).toBeGreaterThanOrEqual(3);
+    // Prénom manquant et e-mail invalide rejettent la ligne ; le téléphone « 12 » (facultatif) est seulement signalé.
+    expect(result.errors.length).toBeGreaterThanOrEqual(2);
+    expect(result.warnings).toEqual([expect.stringContaining("Téléphone : « 12 » non importé")]);
   });
 
   it("détecte un doublon par e-mail (base et fichier) ou par nom dans le même compte", () => {

@@ -116,7 +116,7 @@ describe.skipIf(!hasDb)("import initial CSV/XLSX (PostgreSQL)", () => {
     });
 
     it("refuse un type d'import inconnu et un fichier invalide", async () => {
-      await expect(imp.createBatch(admin, { entity: "leads", filename: "x.csv", buffer: csv("A\n1") })).rejects.toMatchObject({ code: "VALIDATION" });
+      await expect(imp.createBatch(admin, { entity: "opportunities", filename: "x.csv", buffer: csv("A\n1") })).rejects.toMatchObject({ code: "VALIDATION" });
       await expect(imp.createBatch(admin, { entity: "accounts", filename: "x.pdf", buffer: csv("A\n1") })).rejects.toMatchObject({ code: "VALIDATION" });
       expect(await db.importBatch.count()).toBe(0);
     });
@@ -212,7 +212,7 @@ describe.skipIf(!hasDb)("import initial CSV/XLSX (PostgreSQL)", () => {
       });
     });
 
-    it("trace chaque ligne importée, vide ses données brutes et marque le lot comme importé", async () => {
+    it("trace chaque ligne importée, CONSERVE sa source pour le rapprochement et marque le lot comme importé", async () => {
       const id = await uploadAccounts();
       await imp.analyzeBatch(admin, analyzeInput(id));
       const auditBefore = await db.auditLog.count({ where: { action: "import.completed" } });
@@ -222,7 +222,8 @@ describe.skipIf(!hasDb)("import initial CSV/XLSX (PostgreSQL)", () => {
       expect(imported).toHaveLength(2);
       for (const row of imported) {
         expect(row.createdEntityId).not.toBeNull();
-        expect(row.raw).toEqual([]);
+        // La source reste en base jusqu'à la validation du lot (phase 7) : elle sert au rapprochement.
+        expect((row.raw as string[]).length).toBeGreaterThan(0);
         expect(await db.crmAccount.findUnique({ where: { id: row.createdEntityId! } })).not.toBeNull();
       }
       const batch = await imp.getBatch(admin, id);
@@ -368,7 +369,7 @@ describe.skipIf(!hasDb)("import initial CSV/XLSX (PostgreSQL)", () => {
       const before = await db.auditLog.count({ where: { action: "import.rejects_exported" } });
 
       const { filename, csv: report } = await imp.rejectsCsv(admin, id);
-      expect(filename).toBe("rejets-comptes.csv");
+      expect(filename).toBe("anomalies-comptes.csv");
       const lines = report.replace(/^\uFEFF/, "").trim().split("\r\n");
       expect(lines[0]).toBe("Ligne;Résultat;Motif;Raison sociale;Secteur");
       expect(lines).toHaveLength(3);
@@ -382,7 +383,7 @@ describe.skipIf(!hasDb)("import initial CSV/XLSX (PostgreSQL)", () => {
   describe("contraintes en base", () => {
     it("refuse un type de lot, un statut de lot ou un statut de ligne invalide", async () => {
       const base = { filename: "x.csv", headers: [], totalRows: 0, createdByUserId: admin.id };
-      await expect(db.importBatch.create({ data: { ...base, entity: "leads" } })).rejects.toThrow();
+      await expect(db.importBatch.create({ data: { ...base, entity: "opportunities" } })).rejects.toThrow();
       await expect(db.importBatch.create({ data: { ...base, entity: "accounts", status: "bizarre" } })).rejects.toThrow();
 
       const batch = await db.importBatch.create({ data: { ...base, entity: "accounts" } });

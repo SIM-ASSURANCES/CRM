@@ -6,6 +6,7 @@ import {
   ROLE_TYPE_CODES,
 } from "@/features/accounts/config";
 import { optional } from "@/lib/forms";
+import { phoneSchema } from "@/lib/phone";
 
 // Validation des entrées des contacts, de leurs rattachements et de leurs rôles d'achat.
 
@@ -34,13 +35,7 @@ export const contactFieldsSchema = z.object({
   jobTitle: text("Fonction", 150),
   department: text("Service", 100),
   email: optional(z.string().trim().toLowerCase().pipe(z.email("Adresse e-mail invalide."))),
-  phone: optional(
-    z
-      .string()
-      .trim()
-      .transform((value) => value.replace(/[\s.\-()]/g, ""))
-      .pipe(z.string().regex(/^\+?\d{8,15}$/, "Numéro de téléphone invalide (8 à 15 chiffres).")),
-  ),
+  phone: optional(phoneSchema),
   status: z.enum(CONTACT_STATUS_CODES, { error: "Statut invalide." }),
   preferredChannel: optional(z.enum(PREFERRED_CHANNEL_CODES, { error: "Canal invalide." })),
   contactRestrictions: text("Restrictions de contact", 500),

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { LOSS_REASON_CODES, SECTORS, isProgress } from "@/features/leads/config";
+import { phoneSchema } from "@/lib/phone";
 
 // Validation des entrées (formulaires et API). Messages en français, affichés sous les champs.
 
@@ -16,11 +17,8 @@ function required(label: string, max = 200) {
     .max(max, `${label} : ${max} caractères au maximum.`);
 }
 
-const phone = z
-  .string({ error: "Contact téléphonique obligatoire." })
-  .trim()
-  .transform((value) => value.replace(/[\s.\-()]/g, ""))
-  .pipe(z.string().regex(/^\+?\d{8,15}$/, "Numéro de téléphone invalide (8 à 15 chiffres)."));
+// Contact téléphonique obligatoire, enregistré au format unique « +225… » (voir lib/phone.ts).
+const phone = phoneSchema;
 
 const email = z
   .string({ error: "Adresse e-mail obligatoire." })

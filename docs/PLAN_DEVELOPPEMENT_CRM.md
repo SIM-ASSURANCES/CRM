@@ -350,10 +350,10 @@ Durées indicatives pour une équipe de 3 à 4 personnes (1 lead full-stack, 1�
 - [x] Exports CSV/XLSX journalisés, limités par rôle ; cohérence KPI écran / export (REC-10). *(immédiats et plafonnés, pas de job asynchrone : décision du 15/10/2026 ; voir journal)*
 
 ### Phase 7 — Migration de données (≈ 3 semaines, en parallèle de la phase 5)
-- [ ] Inventaire des sources, volumes, qualité.
-- [ ] Mapping source → cible, règles de normalisation (téléphones ivoiriens, secteurs, produits).
-- [ ] Import pilote, rapport d'anomalies, conservation de la source jusqu'à validation.
-- **Sortie** : rapprochement accepté.
+- [x] Inventaire des sources, volumes, qualité. *(profil de la source calculé au dépôt : volumes, doublons, taux de remplissage, types, valeurs fréquentes)*
+- [x] Mapping source → cible, règles de normalisation (téléphones ivoiriens, secteurs, produits). *(comptes, contacts et prospects ; format unique +225 ; correspondances de valeurs par lot ; voir journal)*
+- [x] Import pilote, rapport d'anomalies, conservation de la source jusqu'à validation.
+- **Sortie** : rapprochement accepté. *(rapprochement fichier ↔ base, validation explicite par l'administrateur, puis effacement de la source)*
 
 ### Phase 8 — Recette utilisateur (≈ 3 semaines)
 - [ ] Environnement dédié et données de test anonymisées.
@@ -734,6 +734,25 @@ Durées indicatives pour une équipe de 3 à 4 personnes (1 lead full-stack, 1�
 | Défaut trouvé et corrigé | Fait | Le calcul prévoyait des opportunités ouvertes « sans date de clôture » ; la base l'interdit (contrainte `opportunities_open_requirements_check`) : concept supprimé plutôt que de défendre un état impossible |
 
 **Limites connues** : « revenu signé » = montant annualisé des opportunités gagnées ; la définition comptable (prime, commission, honoraires, premier paiement) reste à confirmer par le métier (CDC 5.3). Le groupe de comptes est le compte parent direct (un seul niveau). La taille d'un compte vient de son effectif (`employeeCount`), souvent non renseigné : la tranche « Taille inconnue » peut dominer tant que les comptes ne sont pas complétés. Les objectifs ne sont pas historisés (seule la dernière valeur est conservée, la trace d'audit garde le total annuel). Le détail mensuel d'un segment figure dans l'export, pas à l'écran. Aucun e-mail ni envoi planifié de rapport.
+
+### Phase 7 — Migration de données : réalisée à 16/10/2026 (code dans `crm/src/features/imports/`, `crm/src/lib/phone.ts`, `crm/src/app/(crm)/admin/import/`)
+
+**Décisions prises avec l'utilisateur** : la migration porte aussi sur les **prospects** (en plus des comptes et contacts) ; **format de téléphone unique +225** partout, à l'import comme à la saisie manuelle.
+
+| Élément du plan | État | Détail |
+|---|---|---|
+| Inventaire des sources | Fait | À la création du lot, `profileSource` calcule volumes, lignes en double, et par colonne : taux de remplissage, nombre de valeurs distinctes, type deviné (téléphone, e-mail, date, nombre, texte) et valeurs les plus fréquentes. Affiché sur la page du lot (« Inventaire de la source ») |
+| Téléphones ivoiriens | Fait | `lib/phone.ts` : `+225` + 10 chiffres commençant par 0 (formats `07 07 35 36 73`, `+225 07…`, `00225…` acceptés) ; autre indicatif international conservé (`+` et 8 à 15 chiffres). Un numéro à 8 chiffres (avant 2021) est signalé `legacy` et **jamais converti** (le préfixe d'opérateur ne se devine pas). Même règle dans les formulaires comptes, contacts et prospects (Zod) |
+| Secteurs et produits | Fait | Alias de secteurs (`SECTOR_ALIASES`), produit retrouvé par clé normalisée (`+` → `plus`). Les valeurs inconnues sont listées dans le panneau « Valeurs à rapprocher » : l'administrateur choisit la valeur du CRM, la correspondance est conservée dans le lot (`valueMap`) et le lot est ré-analysé ; sans choix, la ligne est rejetée |
+| Import des prospects | Fait | Entité `leads` : doublon par e-mail ou entreprise + nom + prénom ; progression 100 % = **gagné présumé** ; perdu exige un motif ; l'historique (`lead_events`) est daté de la date d'insertion du fichier ; responsable par ligne (`ownerEmail`) ou par défaut |
+| Import pilote | Fait | Bouton « Import pilote (50 premières lignes) » (`PILOT_SIZE`) quand le lot dépasse 50 lignes valides ; le lot reste « en cours » et le reste peut être importé ensuite sans doublon |
+| Rapport d'anomalies | Fait | Avertissements par ligne (`warnings`) en plus des rejets et doublons ; CSV `anomalies-<fichier>.csv` (rejetée, doublon, importée avec avertissement) |
+| Conservation de la source | Fait | Les cellules d'origine (`raw`) ne sont plus effacées à l'import : elles servent au rapprochement. Effacées à la **validation**, ou d'office après 90 jours (`purgeExpiredSources`, appelée par `/api/jobs/automations`) ; lot abandonné > 90 j → annulé |
+| Rapprochement (sortie de phase) | Fait | `getReconciliation` : chaque ligne du fichier a un sort (importée + rejetée + doublon + en attente = total), chaque ligne importée retrouve sa fiche en base, et le chiffre d'affaires du fichier d'origine égale celui de la base. `validateBatch` exige une case de prise de connaissance du rapport d'anomalies, est auditée (`import.validated`) et efface la source |
+| Téléphones déjà enregistrés | Fait | Section « Téléphones déjà enregistrés » de `/admin/import` : simulation (comptage sans écriture) puis normalisation réelle, auditée sans numéro (`phone.normalized`, compteurs seulement). **Non exécutée sur la base de développement** : à lancer sur demande |
+| Tests | Fait | Unitaires (téléphone, valeurs, analyse, profil) et d'intégration sur `crm_test` (migration, import, rapprochement, purge, normalisation) ; `tsc`, lint et build réussis. Parcours vérifié dans le navigateur : dépôt, inventaire, analyse, correspondances, import, rapprochement (13 345 790 FCFA fichier = base), validation |
+
+**Limites connues** : aucun vrai fichier source n'a été éprouvé (le parcours a été testé avec des fichiers de test) ; la table `SECTOR_ALIASES` doit être validée avec le métier. Les numéros à 8 chiffres exigent une table de préfixes par opérateur pour être migrés : en attendant ils sont signalés (rejet pour un prospect, où le téléphone est obligatoire ; avertissement pour un compte ou un contact). Les opportunités et activités ne sont pas migrées (seulement comptes, contacts, prospects). « 100 % = gagné » est une présomption à confirmer par le métier. Les données de démonstration existantes peuvent porter des téléphones à normaliser.
 
 
 ---

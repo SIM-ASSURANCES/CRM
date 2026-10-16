@@ -4,10 +4,13 @@ import { normalizeName } from "@/features/accounts/rules";
 import {
   analyzeAccounts,
   analyzeContacts,
+  analyzeLeads,
   buildReport,
+  leadIdentityKey,
   type AccountContext,
   type ContactContext,
   type ImportReport,
+  type LeadContext,
   type RowResult,
 } from "@/features/imports/analysis";
 import {
@@ -17,9 +20,12 @@ import {
   type ImportEntity,
 } from "@/features/imports/config";
 import { parseSpreadsheet } from "@/features/imports/parse";
+import { profileSource, type SourceProfile } from "@/features/imports/profile";
 import { accountNameKey, checkMapping, identifierKey, matchOption, suggestMapping } from "@/features/imports/rules";
+import type { ValueMap } from "@/features/imports/values";
 import { ACCOUNT_STATUSES, CONTACT_STATUSES, COUNTRIES } from "@/features/accounts/config";
-import { SECTORS } from "@/features/leads/config";
+import { CURRENCY, SECTORS } from "@/features/leads/config";
+import { getThresholds } from "@/features/leads/service";
 import { Prisma } from "@/generated/prisma/client";
 import { writeAudit } from "@/lib/audit";
 import { can } from "@/lib/auth/permissions";
@@ -46,6 +52,8 @@ export type BatchSummary = {
   creatorName: string;
   createdAt: Date;
   importedAt: Date | null;
+  /** Rapprochement accepté : la source (cellules d'origine) a alors été effacée. */
+  validatedAt: Date | null;
 };
 
 export type ProblemRow = {
@@ -62,6 +70,10 @@ export type BatchDetail = BatchSummary & {
   suggestedMapping: Record<string, string>;
   defaults: ImportDefaults | null;
   report: ImportReport | null;
+  /** Inventaire de la source, calculé au dépôt du fichier. */
+  profile: SourceProfile | null;
+  /** Correspondances de valeurs choisies pour ce lot. */
+  valueMap: ValueMap;
   problems: ProblemRow[];
   problemsTruncated: boolean;
 };
@@ -91,6 +103,7 @@ function toSummary(batch: Prisma.ImportBatchGetPayload<{ include: { creator: { s
     creatorName: batch.creator.name,
     createdAt: batch.createdAt,
     importedAt: batch.importedAt,
+    validatedAt: batch.validatedAt,
   };
 }
 
@@ -113,6 +126,12 @@ export async function listBatches(user: CurrentUser, limit = 20): Promise<BatchS
   assertImport(user);
   const batches = await db.importBatch.findMany({ orderBy: { createdAt: "desc" }, take: Math.min(Math.max(limit, 1), 100), include: withCreator });
   return batches.map(toSummary);
+}
+
+/** Produits actifs du catalogue (code et libellé) : choix de la table de correspondance des produits d'un fichier. */
+export async function listProductOptions(user: CurrentUser): Promise<{ code: string; label: string }[]> {
+  assertImport(user);
+  return db.product.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { label: "asc" }], select: { code: true, label: true } });
 }
 
 export async function getBatch(user: CurrentUser, id: string): Promise<BatchDetail> {
@@ -138,6 +157,8 @@ export async function getBatch(user: CurrentUser, id: string): Promise<BatchDeta
     suggestedMapping: batch.mapping ? mapping : suggestMapping(headers, IMPORT_FIELDS[entity]),
     defaults: (batch.defaults ?? null) as ImportDefaults | null,
     report: (batch.report ?? null) as ImportReport | null,
+    profile: (batch.profile ?? null) as SourceProfile | null,
+    valueMap: (batch.valueMap ?? {}) as ValueMap,
     problems: problemRows.slice(0, PROBLEMS_SHOWN).map((row) => ({
       rowNumber: row.rowNumber,
       status: row.status as "rejected" | "duplicate",
@@ -166,6 +187,8 @@ export async function createBatch(
         entity: input.entity,
         filename,
         headers: parsed.headers,
+        // Inventaire de la source (volumes, remplissage, types probables, valeurs fréquentes) : calculé une fois, ici.
+        profile: profileSource(parsed.headers, parsed.rows) as unknown as Prisma.InputJsonValue,
         totalRows: parsed.rows.length,
         createdByUserId: user.id,
       },
@@ -193,7 +216,24 @@ async function loadOwners(): Promise<Map<string, string>> {
   return new Map(users.map((user) => [user.email.toLowerCase(), user.id]));
 }
 
-async function loadAccountContext(): Promise<AccountContext> {
+async function loadLeadContext(valueMap: ValueMap): Promise<LeadContext> {
+  const [owners, products, thresholds, leads] = await Promise.all([
+    loadOwners(),
+    db.product.findMany({ where: { active: true }, select: { id: true, code: true, label: true } }),
+    getThresholds(),
+    db.lead.findMany({ select: { companyName: true, contactFirstName: true, contactLastName: true, email: true } }),
+  ]);
+  const existingByEmail = new Map<string, string>();
+  const existingByIdentity = new Map<string, string>();
+  for (const lead of leads) {
+    const description = `${lead.companyName} — ${lead.contactFirstName} ${lead.contactLastName}`;
+    existingByEmail.set(lead.email.toLowerCase(), description);
+    existingByIdentity.set(leadIdentityKey(lead.companyName, lead.contactFirstName, lead.contactLastName), description);
+  }
+  return { owners, products, thresholds, valueMap, existingByEmail, existingByIdentity };
+}
+
+async function loadAccountContext(valueMap: ValueMap): Promise<AccountContext> {
   const accounts = await db.crmAccount.findMany({
     where: { archivedAt: null },
     select: { legalName: true, legalIdentifier: true, country: true },
@@ -204,7 +244,7 @@ async function loadAccountContext(): Promise<AccountContext> {
     if (account.legalIdentifier) existingByIdentifier.set(identifierKey(account.country, account.legalIdentifier), account.legalName);
     existingByName.set(accountNameKey(account.country, account.legalName), account.legalName);
   }
-  return { owners: await loadOwners(), existingByIdentifier, existingByName };
+  return { owners: await loadOwners(), existingByIdentifier, existingByName, valueMap };
 }
 
 async function loadContactContext(): Promise<ContactContext> {
@@ -247,8 +287,43 @@ export const analyzeInputSchema = z.object({
     status: z.string().optional(),
     country: z.string().optional(),
   }),
+  /** Correspondances de valeurs (valeur du fichier normalisée → valeur du CRM) pour les secteurs et les produits. */
+  valueMap: z
+    .object({
+      sector: z.record(z.string().max(200), z.string().max(200)).optional(),
+      product: z.record(z.string().max(200), z.string().max(200)).optional(),
+    })
+    .optional(),
 });
 export type AnalyzeInput = z.infer<typeof analyzeInputSchema>;
+
+/**
+ * Correspondances de valeurs vérifiées : un secteur doit être dans la liste du CRM, un produit dans le catalogue actif.
+ * Une correspondance vers une valeur inexistante est refusée, jamais ignorée en silence.
+ */
+async function resolveValueMap(input: AnalyzeInput["valueMap"]): Promise<ValueMap> {
+  const sector: Record<string, string> = {};
+  const product: Record<string, string> = {};
+  const fieldErrors: FieldErrors = {};
+
+  for (const [key, target] of Object.entries(input?.sector ?? {})) {
+    if (!target) continue;
+    if ((SECTORS as readonly string[]).includes(target)) sector[key] = target;
+    else fieldErrors[`valueMap_sector_${key}`] = [`« ${target} » n'est pas un secteur du CRM.`];
+  }
+
+  const wantedProducts = Object.entries(input?.product ?? {}).filter(([, code]) => code);
+  if (wantedProducts.length > 0) {
+    const codes = new Set((await db.product.findMany({ where: { active: true }, select: { code: true } })).map((candidate) => candidate.code));
+    for (const [key, code] of wantedProducts) {
+      if (codes.has(code)) product[key] = code;
+      else fieldErrors[`valueMap_product_${key}`] = [`« ${code} » n'est pas un produit actif du catalogue.`];
+    }
+  }
+
+  if (Object.keys(fieldErrors).length > 0) fail(fieldErrors, "Certaines correspondances de valeurs sont invalides.");
+  return { sector, product };
+}
 
 /** Valeurs par défaut vérifiées et ramenées à leurs codes : une valeur inconnue est refusée, jamais devinée. */
 async function resolveDefaults(entity: ImportEntity, input: AnalyzeInput["defaults"]): Promise<ImportDefaults> {
@@ -274,7 +349,8 @@ async function resolveDefaults(entity: ImportEntity, input: AnalyzeInput["defaul
       else fieldErrors.country = ["Pays par défaut inconnu."];
     }
   }
-  if (input.status) {
+  // Prospects : le statut vient du fichier (ou du process de vente), jamais d'une valeur par défaut.
+  if (input.status && entity !== "leads") {
     const status = matchOption(input.status, entity === "accounts" ? ACCOUNT_STATUSES : CONTACT_STATUSES);
     if (status) defaults.status = status;
     else fieldErrors.status = ["Statut par défaut inconnu."];
@@ -312,10 +388,15 @@ export async function analyzeBatch(user: CurrentUser, input: AnalyzeInput): Prom
     (row) => ({ rowNumber: row.rowNumber, cells: row.raw as string[] }),
   );
 
+  // Sans nouvelle table fournie, la ré-analyse reprend celle déjà enregistrée sur le lot.
+  const valueMap = input.valueMap ? await resolveValueMap(input.valueMap) : ((batch.valueMap ?? {}) as ValueMap);
+
   const results: Map<number, RowResult> =
     entity === "accounts"
-      ? analyzeAccounts(rows, headers, mapping, defaults, await loadAccountContext())
-      : analyzeContacts(rows, headers, mapping, defaults, await loadContactContext());
+      ? analyzeAccounts(rows, headers, mapping, defaults, await loadAccountContext(valueMap))
+      : entity === "leads"
+        ? analyzeLeads(rows, headers, mapping, defaults, await loadLeadContext(valueMap))
+        : analyzeContacts(rows, headers, mapping, defaults, await loadContactContext());
   const report = buildReport(entity, results.values(), headers, mapping);
 
   // Écriture des résultats par blocs : une transaction par bloc borne la taille des requêtes.
@@ -329,6 +410,7 @@ export async function analyzeBatch(user: CurrentUser, input: AnalyzeInput): Prom
             status: result.status,
             parsed: result.parsed ? (result.parsed as Prisma.InputJsonValue) : Prisma.DbNull,
             errors: result.errors.length > 0 ? result.errors : Prisma.DbNull,
+            warnings: result.warnings.length > 0 ? result.warnings : Prisma.DbNull,
             duplicateOf: result.duplicateOf,
           },
         }),
@@ -343,6 +425,7 @@ export async function analyzeBatch(user: CurrentUser, input: AnalyzeInput): Prom
         status: "analyzed",
         mapping,
         defaults: defaults as Prisma.InputJsonValue,
+        valueMap: valueMap as Prisma.InputJsonValue,
         report: report as unknown as Prisma.InputJsonValue,
         validRows: report.valid,
         rejectedRows: report.rejected,
@@ -357,7 +440,14 @@ export async function analyzeBatch(user: CurrentUser, input: AnalyzeInput): Prom
         action: "import.analyzed",
         entityType: "import_batch",
         entityId: batch.id,
-        metadata: { entity, valid: report.valid, rejected: report.rejected, duplicates: report.duplicatesInDatabase + report.duplicatesInFile },
+        metadata: {
+          entity,
+          valid: report.valid,
+          rejected: report.rejected,
+          duplicates: report.duplicatesInDatabase + report.duplicatesInFile,
+          warningRows: report.warningRows,
+          mappedValues: Object.keys(valueMap.sector ?? {}).length + Object.keys(valueMap.product ?? {}).length,
+        },
       },
       tx,
     );
@@ -399,12 +489,30 @@ type ParsedContact = {
   ownerUserId: string;
 };
 
+type ParsedLead = {
+  companyName: string;
+  sector: string;
+  contactLastName: string;
+  contactFirstName: string;
+  phone: string;
+  email: string;
+  jobTitle: string;
+  /** « AAAA-MM-JJ ». */
+  insertedOn: string;
+  progress: number;
+  status: "open" | "won" | "lost";
+  productId?: string;
+  expectedRevenue?: number;
+  lossReason?: string;
+  ownerUserId: string;
+};
+
 /**
  * Importe UNE ligne dans sa propre transaction : la ligne est « réclamée » (valid → imported) puis l'objet créé. Si la
  * création échoue, la réclamation est annulée avec elle : une ligne n'est jamais marquée importée sans son objet, et
  * deux exécutions simultanées ne peuvent pas importer deux fois la même ligne.
  */
-async function importRow(entity: ImportEntity, row: { id: string; parsed: Prisma.JsonValue }): Promise<"imported" | "skipped"> {
+async function importRow(entity: ImportEntity, row: { id: string; parsed: Prisma.JsonValue }, actorUserId: string): Promise<"imported" | "skipped"> {
   return db.$transaction(async (tx) => {
     const claimed = await tx.importRow.updateMany({ where: { id: row.id, status: "valid" }, data: { status: "imported" } });
     if (claimed.count === 0) return "skipped";
@@ -434,6 +542,46 @@ async function importRow(entity: ImportEntity, row: { id: string; parsed: Prisma
         select: { id: true },
       });
       createdId = account.id;
+    } else if (entity === "leads") {
+      const p = row.parsed as unknown as ParsedLead;
+      const insertedOn = new Date(`${p.insertedOn}T00:00:00.000Z`);
+      const lead = await tx.lead.create({
+        data: {
+          companyName: p.companyName,
+          sector: p.sector,
+          contactLastName: p.contactLastName,
+          contactFirstName: p.contactFirstName,
+          phone: p.phone,
+          email: p.email,
+          jobTitle: p.jobTitle,
+          insertedOn,
+          progress: p.progress,
+          status: p.status,
+          // La date de clôture d'un prospect gagné ou perdu est inconnue de la source : on retient sa date d'insertion.
+          closedAt: p.status === "open" ? null : insertedOn,
+          productId: p.productId ?? null,
+          expectedRevenue: p.expectedRevenue ?? null,
+          currency: CURRENCY,
+          lossReason: p.lossReason ?? null,
+          ownerUserId: p.ownerUserId,
+        },
+        select: { id: true },
+      });
+      // L'historique est daté de la date d'insertion d'ORIGINE : daté d'aujourd'hui, tout le fichier migré apparaîtrait
+      // comme « créé cette semaine » dans les indicateurs. La source ne donne que l'état final : un seul événement.
+      await tx.leadEvent.create({
+        data: {
+          leadId: lead.id,
+          actorUserId,
+          occurredAt: insertedOn,
+          type: p.status === "won" ? "won" : p.status === "lost" ? "lost" : "created",
+          fromProgress: null,
+          toProgress: p.progress,
+          status: p.status,
+          expectedRevenue: p.expectedRevenue ?? null,
+        },
+      });
+      createdId = lead.id;
     } else {
       const p = row.parsed as unknown as ParsedContact;
       const contact = await tx.contact.create({
@@ -466,8 +614,11 @@ export type ImportOutcome = { imported: number; failed: number; remaining: numbe
  * Importe les lignes valides d'un lot analysé. Reprenable : en cas d'interruption, relancer l'import ne traite que les
  * lignes restantes. Une ligne qui échoue à l'insertion (conflit d'unicité, par exemple) est rejetée avec son motif ;
  * elle n'arrête pas les autres.
+ *
+ * `limit` fait un IMPORT PILOTE : seules les premières lignes valides sont importées, le lot reste « en cours », et la
+ * suite s'importe plus tard (sans limite) une fois le pilote vérifié.
  */
-export async function importBatch(user: CurrentUser, id: string): Promise<ImportOutcome> {
+export async function importBatch(user: CurrentUser, id: string, options: { limit?: number } = {}): Promise<ImportOutcome> {
   assertImport(user);
   const batch = await db.importBatch.findUnique({ where: { id } });
   if (!batch) throw errors.notFound("Lot d'import introuvable.");
@@ -476,13 +627,19 @@ export async function importBatch(user: CurrentUser, id: string): Promise<Import
   if (claimed.count === 0) throw errors.conflict("Ce lot n'est pas prêt à être importé (analyse manquante, déjà importé ou annulé).");
 
   const entity = batch.entity as ImportEntity;
-  const rows = await db.importRow.findMany({ where: { batchId: id, status: "valid" }, orderBy: { rowNumber: "asc" }, select: { id: true, parsed: true } });
+  const pilot = options.limit !== undefined;
+  const rows = await db.importRow.findMany({
+    where: { batchId: id, status: "valid" },
+    orderBy: { rowNumber: "asc" },
+    select: { id: true, parsed: true },
+    ...(pilot ? { take: Math.max(1, Math.floor(options.limit as number)) } : {}),
+  });
 
   let failed = 0;
   for (const row of rows) {
     if (row.parsed === null) continue;
     try {
-      await importRow(entity, { id: row.id, parsed: row.parsed });
+      await importRow(entity, { id: row.id, parsed: row.parsed }, user.id);
     } catch (error) {
       failed += 1;
       const conflict = error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
@@ -504,8 +661,8 @@ export async function importBatch(user: CurrentUser, id: string): Promise<Import
   const count = (status: string) => counts.find((entry) => entry.status === status)?._count._all ?? 0;
 
   await db.$transaction(async (tx) => {
-    // Minimisation des données : les cellules d'origine des lignes importées n'ont plus d'utilité (la fiche existe).
-    await tx.importRow.updateMany({ where: { batchId: id, status: "imported" }, data: { raw: [] } });
+    // Les cellules d'origine sont CONSERVÉES : elles servent au rapprochement. Elles sont effacées à la validation du lot
+    // (ou d'office après SOURCE_RETENTION_DAYS), pas à l'import.
     await tx.importBatch.update({
       where: { id },
       data: {
@@ -522,7 +679,7 @@ export async function importBatch(user: CurrentUser, id: string): Promise<Import
         action: "import.completed",
         entityType: "import_batch",
         entityId: id,
-        metadata: { entity, imported: count("imported"), rejected: count("rejected"), duplicates: count("duplicate"), failedAtInsert: failed, remaining },
+        metadata: { entity, pilot, imported: count("imported"), rejected: count("rejected"), duplicates: count("duplicate"), failedAtInsert: failed, remaining },
       },
       tx,
     );
@@ -556,23 +713,28 @@ export async function rejectsCsv(user: CurrentUser, id: string): Promise<{ filen
   const batch = await db.importBatch.findUnique({ where: { id }, select: { headers: true, filename: true, entity: true } });
   if (!batch) throw errors.notFound("Lot d'import introuvable.");
 
+  // Rapport d'anomalies : rejets, doublons ET lignes importées (ou à importer) avec un avertissement.
   const rows = await db.importRow.findMany({
-    where: { batchId: id, status: { in: ["rejected", "duplicate"] } },
+    where: { batchId: id, OR: [{ status: { in: ["rejected", "duplicate"] } }, { NOT: { warnings: { equals: Prisma.DbNull } } }] },
     orderBy: { rowNumber: "asc" },
-    select: { rowNumber: true, status: true, errors: true, duplicateOf: true, raw: true },
+    select: { rowNumber: true, status: true, errors: true, warnings: true, duplicateOf: true, raw: true },
   });
 
+  const outcome = (status: string) =>
+    status === "duplicate" ? "Doublon" : status === "rejected" ? "Rejetée" : status === "imported" ? "Importée avec avertissement" : "Avertissement";
   const csv = toCsv([
     ["Ligne", "Résultat", "Motif", ...(batch.headers as string[])],
     ...rows.map((row) => [
       row.rowNumber,
-      row.status === "duplicate" ? "Doublon" : "Rejetée",
-      row.status === "duplicate" ? (row.duplicateOf ?? "") : ((row.errors ?? []) as string[]).join(" | "),
+      outcome(row.status),
+      row.status === "duplicate"
+        ? (row.duplicateOf ?? "")
+        : [...((row.errors ?? []) as string[]), ...((row.warnings ?? []) as string[])].join(" | "),
       ...(row.raw as string[]),
     ]),
   ]);
 
   await writeAudit({ actorUserId: user.id, action: "import.rejects_exported", entityType: "import_batch", entityId: id, metadata: { entity: batch.entity, rows: rows.length } });
   const base = batch.filename.replace(/\.[^.]+$/, "").replace(/[^\w.-]+/g, "_") || "import";
-  return { filename: `rejets-${base}.csv`, csv };
+  return { filename: `anomalies-${base}.csv`, csv };
 }

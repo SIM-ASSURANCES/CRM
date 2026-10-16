@@ -154,9 +154,10 @@ Code dans `src/features/audit/` (consultation, export) et `src/features/imports/
 `/api/import/[id]/rejects` et `/api/import/template`. Utilitaire CSV partagé : `src/lib/csv.ts`.
 
 - **Journal d'audit** : filtrable, en ajout seul ; son export CSV (plafonné, limité en fréquence) est lui-même tracé.
-- **Import CSV/XLSX** (comptes puis contacts), réservé à l'administrateur : dépôt → association des colonnes →
+- **Import CSV/XLSX** (comptes, contacts, prospects), réservé à l'administrateur : dépôt → association des colonnes →
   analyse (rapport de qualité : rejets, doublons, champs manquants) → import après confirmation. Rien n'est écrit avant.
-- L'import est **reprenable** et sans double création ; les cellules d'origine sont effacées une fois importées.
+- L'import est **reprenable** et sans double création ; les cellules d'origine sont conservées jusqu'à la validation
+  du rapprochement (voir « Migration de données », phase 7).
 - Limites : 2 000 lignes et 5 Mo par fichier. Dans Excel, enregistrez les téléphones en texte pour garder le 0 initial.
 
 ## Stabilisation (phase 4, sprint 4.7)
@@ -174,6 +175,23 @@ Code dans `src/features/audit/` (consultation, export) et `src/features/imports/
   ```
 
   Les identifiants générés sont écrits dans `.e2e-credentials` (ignoré par git).
+
+## Migration de données (phase 7)
+
+Code dans `src/features/imports/` (`values`, `profile`, `analysis` purs ; `service` ; `migration`) et `src/lib/phone.ts`,
+écran `/admin/import/[id]`.
+
+- **Inventaire de la source** dès le dépôt : volumes, doublons, taux de remplissage, types et valeurs fréquentes par colonne.
+- **Téléphones : format unique +225** (10 chiffres commençant par 0), à l'import comme à la saisie manuelle. Un numéro à
+  8 chiffres (avant 2021) est signalé et jamais converti ; un autre indicatif international est conservé tel quel.
+- **Valeurs à rapprocher** : secteurs et produits inconnus listés, l'administrateur choisit la valeur du CRM (conservée
+  dans le lot), sinon la ligne est rejetée.
+- **Prospects** importables ; 100 % = gagné présumé ; l'historique est daté de la date du fichier.
+- **Import pilote** (50 premières lignes) puis import du reste ; rapport d'anomalies téléchargeable (CSV).
+- **Rapprochement** : lignes du fichier = importées + rejetées + doublons ; chaque ligne importée retrouvée en base ;
+  chiffre d'affaires du fichier égal à celui de la base. La **validation** (auditée) efface la source ; sans validation,
+  elle est effacée d'office après 90 jours (`POST /api/jobs/automations`).
+- **Téléphones déjà enregistrés** : simulation puis normalisation depuis `/admin/import` (à lancer sur demande).
 
 ## Reporting avancé (phase 6)
 

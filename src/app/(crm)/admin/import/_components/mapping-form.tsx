@@ -11,7 +11,7 @@ type Option = { value: string; label: string };
 
 type MappingFormProps = {
   batchId: string;
-  entity: "accounts" | "contacts";
+  entity: "accounts" | "contacts" | "leads";
   headers: string[];
   fields: { key: string; label: string; required: boolean; hint?: string }[];
   /** Association de départ : celle déjà enregistrée, sinon la suggestion automatique. */
@@ -107,15 +107,18 @@ export function MappingForm({
               error={error("sector")}
             />
           )}
-          <SelectField
-            key={keyOf("status")}
-            label="Statut"
-            name="status"
-            placeholder={entity === "accounts" ? "Prospect" : "Actif"}
-            defaultValue={value("status", initialDefaults.status ?? "")}
-            options={statuses}
-            error={error("status")}
-          />
+          {/* Prospects : le statut vient du fichier (ou du process de vente), jamais d'une valeur par défaut. */}
+          {entity !== "leads" && (
+            <SelectField
+              key={keyOf("status")}
+              label="Statut"
+              name="status"
+              placeholder={entity === "accounts" ? "Prospect" : "Actif"}
+              defaultValue={value("status", initialDefaults.status ?? "")}
+              options={statuses}
+              error={error("status")}
+            />
+          )}
           {entity === "accounts" && (
             <SelectField
               key={keyOf("country")}

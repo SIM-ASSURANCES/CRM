@@ -6,6 +6,7 @@ import {
 } from "@/features/accounts/config";
 import { SECTORS } from "@/features/leads/config";
 import { optional } from "@/lib/forms";
+import { phoneSchema } from "@/lib/phone";
 
 // Validation des entrées des comptes (formulaires et API). Messages en français, affichés sous les champs.
 
@@ -15,13 +16,8 @@ function text(label: string, max = 200) {
 
 const checkbox = z.preprocess((value) => value === "on" || value === "true" || value === true, z.boolean());
 
-const phone = optional(
-  z
-    .string()
-    .trim()
-    .transform((value) => value.replace(/[\s.\-()]/g, ""))
-    .pipe(z.string().regex(/^\+?\d{8,15}$/, "Numéro de téléphone invalide (8 à 15 chiffres).")),
-);
+// Numéro enregistré au format unique « +225… » (voir lib/phone.ts).
+const phone = optional(phoneSchema);
 
 const emailDomain = optional(
   z

@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     const entity = new URL(request.url).searchParams.get("entite") ?? "";
     if (!isImportEntity(entity)) throw errors.validation("Type d'import invalide.");
 
-    const filename = `modele-import-${entity === "accounts" ? "comptes" : "contacts"}.csv`;
+    const filename = `modele-import-${entity === "accounts" ? "comptes" : entity === "contacts" ? "contacts" : "prospects"}.csv`;
     return csvResponse(filename, toCsv(templateRows(entity)));
   } catch (error) {
     return toErrorResponse(error);

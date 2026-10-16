@@ -2,8 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { MAX_IMPORT_BYTES } from "@/features/imports/config";
-import { analyzeBatch, analyzeInputSchema, cancelBatch, createBatch, importBatch } from "@/features/imports/service";
+import { MAX_IMPORT_BYTES, PILOT_SIZE } from "@/features/imports/config";
+import { normalizeStoredPhones, validateBatch } from "@/features/imports/migration";
+import { analyzeBatch, analyzeInputSchema, cancelBatch, createBatch, getBatch, importBatch } from "@/features/imports/service";
 import { failureState, type AdminFormState } from "@/lib/action-result";
 import { can } from "@/lib/auth/permissions";
 import { requireUser } from "@/lib/auth/session";
@@ -99,13 +100,78 @@ export async function importAction(formData: FormData): Promise<void> {
   // Confirmation explicite : l'import crée de vraies fiches, il ne part jamais d'un simple clic.
   if (formData.get("confirm") !== "on") redirect(`${back}?erreur=confirmation`);
 
+  // Import pilote : seules les premières lignes valides sont créées ; la suite s'importe après vérification.
+  const pilot = formData.get("pilot") === "1";
   try {
-    await importBatch(actor, parsed.data.id);
+    await importBatch(actor, parsed.data.id, pilot ? { limit: PILOT_SIZE } : {});
   } catch (error) {
     if (error instanceof AppError) redirect(`${back}?erreur=import`);
     throw error;
   }
-  redirect(`${back}?ok=imported`);
+  redirect(`${back}?ok=${pilot ? "pilot" : "imported"}`);
+}
+
+/**
+ * Rapproche des valeurs inconnues du fichier (secteurs, produits) d'une valeur du CRM, puis ré-analyse le lot. L'association
+ * des colonnes et les valeurs par défaut déjà choisies sont reprises telles quelles ; les correspondances s'ajoutent aux
+ * précédentes. Les champs arrivent sous la forme « vm_sector_<clé> » et « vm_product_<clé> ».
+ */
+export async function valueMapAction(formData: FormData): Promise<void> {
+  const actor = await authorize();
+  const parsed = z.object({ id: z.uuid() }).safeParse({ id: formData.get("id") });
+  if (!actor || !parsed.success) redirect("/admin/import");
+  const back = `/admin/import/${parsed.data.id}`;
+
+  const sector: Record<string, string> = {};
+  const product: Record<string, string> = {};
+  for (const [name, value] of formData.entries()) {
+    if (typeof value !== "string" || value === "") continue;
+    // La clé est une valeur normalisée (lettres et chiffres) : tout autre format est ignoré.
+    const match = /^vm_(sector|product)_([a-z0-9]{1,100})$/.exec(name);
+    if (!match) continue;
+    (match[1] === "sector" ? sector : product)[match[2]] = value;
+  }
+
+  try {
+    const batch = await getBatch(actor, parsed.data.id);
+    if (!batch.defaults) redirect(`${back}?erreur=correspondances`);
+    await analyzeBatch(actor, {
+      id: batch.id,
+      mapping: batch.mapping,
+      defaults: batch.defaults,
+      valueMap: { sector: { ...batch.valueMap.sector, ...sector }, product: { ...batch.valueMap.product, ...product } },
+    });
+  } catch (error) {
+    if (error instanceof AppError) redirect(`${back}?erreur=correspondances`);
+    throw error;
+  }
+  redirect(`${back}?ok=mapped`);
+}
+
+/** Accepte le rapprochement d'un lot : il passe à « Validé » et sa source est effacée. */
+export async function validateAction(formData: FormData): Promise<void> {
+  const actor = await authorize();
+  const parsed = z.object({ id: z.uuid() }).safeParse({ id: formData.get("id") });
+  if (!actor || !parsed.success) redirect("/admin/import");
+  const back = `/admin/import/${parsed.data.id}`;
+
+  try {
+    await validateBatch(actor, parsed.data.id, { acknowledged: formData.get("acknowledged") === "on" });
+  } catch (error) {
+    if (error instanceof AppError) redirect(`${back}?erreur=${error.code === "VALIDATION" && error.message.startsWith("Confirmez") ? "acquittement" : "validation"}`);
+    throw error;
+  }
+  redirect(`${back}?ok=validated`);
+}
+
+/** Normalise les téléphones déjà enregistrés (comptes, contacts, prospects) au format +225… après confirmation. */
+export async function normalizePhonesAction(formData: FormData): Promise<void> {
+  const actor = await authorize();
+  if (!actor) redirect("/admin/import");
+  if (formData.get("confirm") !== "on") redirect("/admin/import?telephones=simulation&erreur=confirmation");
+
+  await normalizeStoredPhones(actor);
+  redirect("/admin/import?ok=phones");
 }
 
 export async function cancelAction(formData: FormData): Promise<void> {

@@ -1,5 +1,6 @@
 import { connection } from "next/server";
 import { runAutomations } from "@/features/automations/engine";
+import { purgeExpiredSources } from "@/features/imports/migration";
 import { rejectUnauthorizedCron } from "@/lib/cron";
 import { logger } from "@/lib/logger";
 
@@ -14,8 +15,11 @@ export async function POST(request: Request) {
 
   try {
     const results = await runAutomations({ trigger: "schedule" });
+    // Minimisation des données : la source des lots d'import non validés est effacée d'office après 90 jours.
+    const sourcePurge = await purgeExpiredSources();
     // Uniquement des compteurs : ni nom de compte, ni destinataire.
     return Response.json({
+      sourcePurge,
       results: results.map((r) => ({
         rule: r.ruleCode,
         status: r.status,

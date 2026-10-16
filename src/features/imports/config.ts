@@ -1,12 +1,22 @@
 // Import initial de données (CDC 11, 14 et 16) : champs importables, synonymes d'en-têtes et limites.
 
-export const IMPORT_ENTITIES = ["accounts", "contacts"] as const;
+export const IMPORT_ENTITIES = ["accounts", "contacts", "leads"] as const;
 export type ImportEntity = (typeof IMPORT_ENTITIES)[number];
 
 export const IMPORT_ENTITY_LABELS: Record<ImportEntity, string> = {
   accounts: "Comptes (entreprises)",
   contacts: "Contacts",
+  leads: "Prospects",
 };
+
+/** Import pilote : nombre de lignes valides importées avant la décision de poursuivre (phase 7). */
+export const PILOT_SIZE = 50;
+
+/**
+ * Conservation de la source : les cellules d'origine d'un lot importé sont gardées pour le rapprochement, jusqu'à sa
+ * validation. Sans validation, elles sont effacées d'office après ce délai (minimisation des données).
+ */
+export const SOURCE_RETENTION_DAYS = 90;
 
 /** Un import traite un fichier en une seule requête : au-delà, le fichier doit être découpé (limite documentée). */
 export const MAX_IMPORT_ROWS = 2000;
@@ -19,6 +29,7 @@ export const BATCH_STATUS_LABELS: Record<string, string> = {
   analyzed: "Analysé",
   importing: "Import en cours",
   imported: "Importé",
+  validated: "Validé",
   cancelled: "Annulé",
 };
 
@@ -77,9 +88,39 @@ export const IMPORT_FIELDS: Record<ImportEntity, ImportField[]> = {
     { key: "status", label: "Statut", required: false, aliases: ["etat", "statut du contact"], hint: "Actif, À confirmer ou Parti." },
     { key: "ownerEmail", label: "E-mail du responsable commercial", required: false, aliases: ["responsable", "commercial", "proprietaire", "owner"] },
   ],
+  // Prospects : les champs de la fenêtre « Reporting prospect » de l'Excel (entreprise, contact, date d'insertion, process
+  // de vente en %, produit et chiffre d'affaires dès la qualification). Mêmes règles que la saisie manuelle.
+  leads: [
+    { key: "companyName", label: "Nom de l'entreprise", required: true, aliases: ["entreprise", "societe", "raison sociale", "company", "nom entreprise", "nom de la societe"] },
+    { key: "sector", label: "Secteur d'activité", required: true, aliases: ["secteur", "activite", "domaine d activite", "industry"], hint: "Valeur de la liste du CRM ; les variantes se rapprochent à l'analyse." },
+    { key: "contactLastName", label: "Nom du prospect", required: true, aliases: ["nom", "nom du contact", "nom de famille", "last name", "lastname"] },
+    { key: "contactFirstName", label: "Prénom du prospect", required: true, aliases: ["prenom", "prenoms", "prenom du contact", "first name", "firstname"] },
+    { key: "phone", label: "Contact téléphonique", required: true, aliases: ["telephone", "tel", "numero de telephone", "mobile", "contact"], hint: "Enregistré au format +225…" },
+    { key: "email", label: "Adresse e-mail", required: true, aliases: ["e mail", "mail", "courriel", "email du contact", "adresse mail"] },
+    { key: "jobTitle", label: "Fonction du prospect", required: true, aliases: ["fonction", "poste", "titre", "job title", "role"] },
+    {
+      key: "insertedOn",
+      label: "Date d'insertion",
+      required: true,
+      aliases: ["date", "date d ajout", "date de creation", "date d insertion", "inserted on"],
+      hint: "JJ/MM/AAAA ou AAAA-MM-JJ ; jamais postérieure à aujourd'hui.",
+    },
+    {
+      key: "progress",
+      label: "Process de vente (%)",
+      required: true,
+      aliases: ["process", "process de vente", "etape", "avancement", "progression", "pourcentage", "stade"],
+      hint: "10, 20, 40, 60, 80, 90 ou 100 (« 40 % » et « 0,4 » sont compris).",
+    },
+    { key: "productName", label: "Produit proposé", required: false, recommended: true, aliases: ["produit", "produit propose", "offre", "garantie"], hint: "Obligatoire au-delà du seuil de qualification." },
+    { key: "expectedRevenue", label: "Chiffre d'affaires attendu (FCFA)", required: false, recommended: true, aliases: ["chiffre d affaires", "ca", "montant", "valeur", "valeur de l offre", "revenu"] },
+    { key: "status", label: "Statut", required: false, aliases: ["etat", "statut du prospect", "issue"], hint: "Ouvert, Gagné ou Perdu. Sinon : gagné à 100 %, ouvert sinon." },
+    { key: "lossReason", label: "Motif de perte", required: false, aliases: ["motif", "raison de la perte", "cause de perte"], hint: "Obligatoire pour un prospect perdu." },
+    { key: "ownerEmail", label: "E-mail du responsable commercial", required: false, aliases: ["responsable", "commercial", "proprietaire", "owner"], hint: "Sinon, le responsable par défaut." },
+  ],
 };
 
-/** Valeurs par défaut choisies à l'étape d'association des colonnes. */
+/** Valeurs par défaut choisies à l'étape d'association des colonnes (secteur : comptes seulement ; responsable : toutes les entités). */
 export type ImportDefaults = {
   ownerUserId: string;
   sector?: string;
@@ -110,6 +151,19 @@ export function templateRows(entity: ImportEntity): string[][] {
       email: "awa.kone@exemple.ci",
       phone: "0102030405",
       status: "Actif",
+    },
+    leads: {
+      companyName: "Société Exemple SARL",
+      sector: "Commerce et distribution",
+      contactLastName: "Koné",
+      contactFirstName: "Awa",
+      phone: "01 02 03 04 05",
+      email: "awa.kone@exemple.ci",
+      jobTitle: "Directrice financière",
+      insertedOn: "13/10/2026",
+      progress: "40",
+      productName: "RELAX Auto",
+      expectedRevenue: "6 245 790",
     },
   };
   return [fields.map((field) => field.label), fields.map((field) => example[entity][field.key] ?? "")];

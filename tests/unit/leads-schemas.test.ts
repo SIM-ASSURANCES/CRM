@@ -26,7 +26,7 @@ describe("createLeadSchema", () => {
     const result = createLeadSchema.safeParse(valid);
     expect(result.success).toBe(true);
     if (!result.success) return;
-    expect(result.data.phone).toBe("0707353673");
+    expect(result.data.phone).toBe("+2250707353673");
     expect(result.data.email).toBe("koffi.gado@client.ci");
     expect(result.data.progress).toBe(20);
     expect(result.data.productId).toBeUndefined();
@@ -45,7 +45,7 @@ describe("createLeadSchema", () => {
     expect(messages({ ...valid, sector: "Inconnu" })).toContain("Secteur d'activité obligatoire.");
     expect(messages({ ...valid, progress: "30" })).toContain("Étape du process de vente invalide.");
     expect(messages({ ...valid, email: "pas-un-mail" })).toContain("Adresse e-mail invalide.");
-    expect(messages({ ...valid, phone: "123" })).toContain("Numéro de téléphone invalide (8 à 15 chiffres).");
+    expect(messages({ ...valid, phone: "123" })).toContain("Numéro de téléphone invalide : 10 chiffres pour la Côte d'Ivoire (exemple : 01 02 03 04 05), ou un numéro international en +.");
   });
 
   it("signale les champs obligatoires manquants", () => {
