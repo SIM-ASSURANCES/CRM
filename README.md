@@ -176,6 +176,17 @@ Code dans `src/features/audit/` (consultation, export) et `src/features/imports/
 
   Les identifiants générés sont écrits dans `.e2e-credentials` (ignoré par git).
 
+## Déploiement (Docker, Dokploy)
+
+Image `ghcr.io/sim-assurances/crm:v0` (`Dockerfile`, `docker-entrypoint.sh`), publiée sur `https://crm.mysimssurances.com`.
+Le conteneur applique les migrations au démarrage et expose `GET /api/health`. Variables d'environnement, création du
+premier administrateur, tâches planifiées, sauvegarde et retour arrière : voir [docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md).
+
+```bash
+docker build -t ghcr.io/sim-assurances/crm:v0 .
+docker push ghcr.io/sim-assurances/crm:v0
+```
+
 ## Migration de données (phase 7)
 
 Code dans `src/features/imports/` (`values`, `profile`, `analysis` purs ; `service` ; `migration`) et `src/lib/phone.ts`,
@@ -192,6 +203,23 @@ Code dans `src/features/imports/` (`values`, `profile`, `analysis` purs ; `servi
   chiffre d'affaires du fichier égal à celui de la base. La **validation** (auditée) efface la source ; sans validation,
   elle est effacée d'office après 90 jours (`POST /api/jobs/automations`).
 - **Téléphones déjà enregistrés** : simulation puis normalisation depuis `/admin/import` (à lancer sur demande).
+
+## Recette (phase 8)
+
+Documents : `docs/RECETTE.md` (scénarios REC-01 à REC-12, parcours Excel, registre des anomalies, modèle de procès-verbal
+vierge) et `docs/RECETTE_SECURITE.md` (revue OWASP, CSP, limitation de débit, fichiers).
+
+```bash
+npm run recette:init           # crée la base `crm_recette`, applique les migrations, charge un jeu de données fictives
+npm run build && npm run recette:start   # serveur de recette sur http://localhost:3200
+npm run recette:restore-test   # REC-12 : sauvegarde, restauration, contrôles d'intégrité, rapport dans docs/recette/
+```
+
+- Les données de recette sont **fictives et reproductibles** (aucune donnée réelle) ; les identifiants des comptes d'essai
+  sont générés dans `.recette-credentials` (ignoré par git, jamais affiché).
+- Objectifs de reprise : **RPO 24 h**, **RTO 4 h**.
+- `tests/unit/recette-traceability.test.ts` relie chaque scénario à des tests existants et échoue si l'un d'eux disparaît.
+- La CSP garde `'unsafe-inline'` pour les scripts : un nonce est incompatible avec le rendu partiel de l'application.
 
 ## Reporting avancé (phase 6)
 
