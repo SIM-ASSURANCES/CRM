@@ -24,6 +24,7 @@
     "db:studio": "prisma studio",
     "db:seed": "tsx --conditions=react-server prisma/seed.ts",
     "jobs:run": "tsx --conditions=react-server scripts/run-automations.ts",
+    "brand:assets": "node scripts/brand-assets.mjs",
     "format": "prettier --write ."
   },
   "dependencies": {

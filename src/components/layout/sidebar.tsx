@@ -40,7 +40,8 @@ export function Sidebar({ role, collapsed, onToggle }: SidebarProps) {
           <BrandLogo variant="white" compact />
         ) : (
           <>
-            <BrandLogo variant="white" className="max-md:hidden" />
+            {/* 32 px de haut : le logotype complet (≈ 6,8 fois plus large que haut) tient alors dans les 216 px utiles. */}
+            <BrandLogo variant="white" className="h-8 max-md:hidden" />
             <BrandLogo variant="white" compact className="md:hidden" />
           </>
         )}
