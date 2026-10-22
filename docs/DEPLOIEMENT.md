@@ -1,6 +1,6 @@
 # Déploiement du CRM (Docker + Dokploy)
 
-Image : `ghcr.io/sim-assurances/crm:v1` · Domaine : **`https://crm.mysimassurances.com`** · Port du conteneur : **3000**
+Image : `ghcr.io/sim-assurances/crm:v2` · Domaine : **`https://crm.mysimassurances.com`** · Port du conteneur : **3000**
 Fichier de déploiement : [`docker-compose.raw.yml`](../docker-compose.raw.yml) (Dokploy → Compose → Provider **Raw**)
 
 **Au déploiement, tout se fait automatiquement :**
@@ -69,7 +69,7 @@ Microsoft 365 : URI de redirection Azure `https://crm.mysimassurances.com/api/in
 
 1. **Sauvegarder la base avant toute mise à jour** : `pg_dump -Fc crm > crm-AAAAMMJJ.dump` (voir aussi `npm run recette:restore-test`
    qui prouve qu'une sauvegarde se restaure, avec les objectifs RPO 24 h / RTO 4 h de `docs/RECETTE.md`).
-2. Changer le tag de l'image dans le compose (`v2`, `v3`…), jamais réutiliser un tag, puis **Redeploy**.
+2. Changer le tag de l'image dans le compose (`v3`, `v4`…), jamais réutiliser un tag, puis **Redeploy**.
 3. Les migrations sont **en avant uniquement** : un retour à l'image précédente ne défait pas une migration. Si une migration
    pose problème : remettre l'image précédente **et** restaurer la sauvegarde de l'étape 1.
 4. Pour contrôler soi-même les migrations : `RUN_MIGRATIONS=false`, puis dans le terminal du conteneur
@@ -80,9 +80,9 @@ Microsoft 365 : URI de redirection Azure `https://crm.mysimassurances.com/api/in
 ## 6. Construire et publier l'image (poste de développement)
 
 ```bash
-docker build -t ghcr.io/sim-assurances/crm:v1 .
+docker build -t ghcr.io/sim-assurances/crm:v2 .
 docker login ghcr.io            # utilisateur GitHub + jeton (PAT) avec le droit write:packages
-docker push ghcr.io/sim-assurances/crm:v1
+docker push ghcr.io/sim-assurances/crm:v2
 ```
 
 Le Dockerfile utilise des valeurs factices uniquement pendant la compilation ; aucune variable réelle n'entre dans l'image.

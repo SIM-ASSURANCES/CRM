@@ -33,7 +33,7 @@ services:
       retries: 10
 
   app:
-    image: ghcr.io/sim-assurances/crm:v1
+    image: ghcr.io/sim-assurances/crm:v2
     restart: unless-stopped
     depends_on:
       db:

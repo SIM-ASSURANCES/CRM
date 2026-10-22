@@ -176,17 +176,26 @@ Code dans `src/features/audit/` (consultation, export) et `src/features/imports/
 
   Les identifiants générés sont écrits dans `.e2e-credentials` (ignoré par git).
 
+## Identité visuelle (logo et icône)
+
+Les deux fichiers fournis dans `public/` font foi : `logosim.webp` (logotype blanc, fond transparent) et `favicon.png`
+(pictogramme en couleurs). `npm run brand:assets` (`scripts/brand-assets.mjs`) en tire les variantes utilisées par
+l'application : logotype coloré pour fonds blancs, pictogramme seul (blanc et en couleurs), icône d'onglet 512×512
+(`src/app/icon.png`) et icône d'écran d'accueil 180×180 (`src/app/apple-icon.png`). Composant : `components/brand/brand-logo.tsx`.
+Les variantes colorées sont **dérivées** : si le fichier officiel du logotype en couleurs est fourni, le déposer dans `public/`
+sous le nom `logosim-couleur.webp` et ne plus lancer le script.
+
 ## Déploiement (Docker, Dokploy)
 
-Image `ghcr.io/sim-assurances/crm:v1` (`Dockerfile`, `docker-entrypoint.sh`), publiée sur `https://crm.mysimassurances.com`
+Image `ghcr.io/sim-assurances/crm:v2` (`Dockerfile`, `docker-entrypoint.sh`), publiée sur `https://crm.mysimassurances.com`
 avec `docker-compose.raw.yml` (Dokploy → Compose → Raw). Au déploiement, tout est automatique : migrations, création du
 premier administrateur (mot de passe temporaire généré et affiché une fois dans les journaux s'il n'est pas fourni),
 domaine HTTPS et tâches planifiées. Variables d'environnement, mise à jour, sauvegarde et retour arrière : voir
 [docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md).
 
 ```bash
-docker build -t ghcr.io/sim-assurances/crm:v1 .
-docker push ghcr.io/sim-assurances/crm:v1
+docker build -t ghcr.io/sim-assurances/crm:v2 .
+docker push ghcr.io/sim-assurances/crm:v2
 ```
 
 ## Migration de données (phase 7)
@@ -236,6 +245,20 @@ Code dans `src/features/reporting/` (`config` : dictionnaire des KPI ; `rules` e
 - **Exports CSV / XLSX** (manager et au-dessus) : mêmes chiffres que l'écran (testé), filtres et date de génération en
   en-tête, définitions des KPI incluses, limités en fréquence et en volume, chaque export tracé dans le journal d'audit.
 - Chacun ne voit que son périmètre (commercial : les siennes ; manager : son équipe ; direction, administrateur et audit : tout).
+
+### Historique des prospects
+
+Écran `/rapports/prospects` (menu Reporting), code dans `src/features/leads/history.ts` et `history-math.ts` : nouveaux prospects
+**par jour et par semaine**, comparés à la semaine précédente (et au même jour de la semaine passée), et **nombre de prospects à
+chaque étape** à la fin de chaque jour et de chaque semaine, avec les gagnés et les perdus.
+
+- **Rien n'est archivé** : le passé est reconstitué à partir de l'historique daté de chaque prospect (`lead_events`), comme le
+  tableau de bord. L'historique existe donc dès maintenant, y compris pour les prospects importés, et ne peut pas diverger.
+- Nouveau prospect = date d'insertion dans la période ; mêmes chiffres que le tableau de bord (testé). Semaines du lundi au
+  dimanche, en UTC. Filtres : 4 à 52 semaines, 14 à 90 jours, commercial (manager et au-dessus).
+- **Date d'insertion** : un prospect saisi dans le CRM porte **toujours la date du jour**, ni passée ni future (champ non
+  modifiable, règle revérifiée côté serveur) ; elle ne peut plus être modifiée ensuite. Seul l'**import de données**
+  (migration) reprend les dates historiques de la source, sans jamais accepter une date future.
 
 ## Intégration Microsoft 365 — messagerie (phase 5)
 
