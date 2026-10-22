@@ -2,6 +2,7 @@ import {
   Activity,
   Building2,
   ChartColumn,
+  ChartLine,
   ChartPie,
   ContactRound,
   FileUp,
@@ -97,6 +98,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Reporting",
     items: [
       { href: "/rapports/previsions", label: "Prévisions", icon: ChartColumn, permission: "report:read" },
+      { href: "/rapports/prospects", label: "Historique des prospects", icon: ChartLine, permission: "report:read" },
       { href: "/rapports/pertes", label: "Motifs de perte", icon: ChartPie, permission: "report:read" },
     ],
   },

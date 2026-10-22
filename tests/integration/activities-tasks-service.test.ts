@@ -344,7 +344,9 @@ describe.skipIf(!hasDb)("activités, fil et tâches (PostgreSQL)", () => {
         criteriaConfirmed: true,
         wonConfirmed: false,
       });
-      await tsk.createTask(a, taskInput({ opportunityId: oppId, title: "Préparer le devis", dueDate: day(20) }), now);
+      // Échéance lointaine : la tâche doit rester l'élément le plus récent du fil quelle que soit la date réelle d'exécution du
+      // test (le changement d'étape ci-dessus est horodaté à l'instant réel ; avec day(20) le test échouait après le 20 octobre).
+      await tsk.createTask(a, taskInput({ opportunityId: oppId, title: "Préparer le devis", dueDate: new Date(Date.UTC(2035, 0, 15)) }), now);
       await db.activity.create({
         data: { type: "email", subject: "E-mail reçu", occurredAt: new Date(Date.UTC(2026, 9, 1)), authorUserId: a.id, accountId, origin: "sync" },
       });
