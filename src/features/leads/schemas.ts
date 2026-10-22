@@ -26,12 +26,25 @@ const email = z
   .toLowerCase()
   .pipe(z.email("Adresse e-mail invalide."));
 
-// Date d'insertion : « ne peut être postérieure à la date du jour » (Excel). Un jour de tolérance couvre les fuseaux.
+// Date d'insertion (base commune à la saisie, à la modification et à l'import) : « ne peut être postérieure à la date du
+// jour » (Excel) ; un jour de tolérance couvre les fuseaux. Les règles plus strictes sont ajoutées par-dessus : la création
+// dans le CRM exige la date du jour (`createLeadSchema`), la modification ne peut pas la changer (vérifié par le service) ;
+// l'import, lui, reprend des dates historiques et n'a que cette règle de base.
 const insertedOn = z
   .iso.date({ error: "Date d'insertion invalide." })
   .refine((value) => new Date(`${value}T00:00:00.000Z`).getTime() <= Date.now() + 24 * 3600 * 1000, {
     message: "La date d'insertion ne peut pas être postérieure à la date du jour.",
   })
+  .transform((value) => new Date(`${value}T00:00:00.000Z`));
+
+/** Jour courant au format AAAA-MM-JJ, en UTC (la Côte d'Ivoire est à UTC+0 toute l'année). */
+const todayIso = () => new Date().toISOString().slice(0, 10);
+
+/** Un prospect saisi dans le CRM porte la date du jour : ni passée ni future (l'import, lui, reprend des dates historiques). */
+export const INSERTED_ON_TODAY_MESSAGE = "La date d'insertion est celle du jour : elle ne peut être ni passée ni future.";
+const insertedOnToday = z
+  .iso.date({ error: "Date d'insertion invalide." })
+  .refine((value) => value === todayIso(), { message: INSERTED_ON_TODAY_MESSAGE })
   .transform((value) => new Date(`${value}T00:00:00.000Z`));
 
 const progress = z.coerce
@@ -67,7 +80,7 @@ export const leadFieldsSchema = z.object({
   wonConfirmed: checkbox,
 });
 
-export const createLeadSchema = leadFieldsSchema.extend({ forceDuplicate: checkbox });
+export const createLeadSchema = leadFieldsSchema.extend({ insertedOn: insertedOnToday, forceDuplicate: checkbox });
 
 export const updateLeadSchema = leadFieldsSchema.extend({
   id: z.uuid({ error: "Identifiant invalide." }),

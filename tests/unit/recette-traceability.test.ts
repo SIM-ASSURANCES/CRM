@@ -146,7 +146,7 @@ const EXCEL: Scenario[] = [
     label: "Date ≤ aujourd'hui ; seuil de qualification",
     status: "automated",
     tests: [
-      { file: `${U}leads-schemas.test.ts`, title: "refuse une date d'insertion postérieure à la date du jour" },
+      { file: `${U}leads-schemas.test.ts`, title: "n'accepte que la date du jour : ni une date passée, ni une date future" },
       { file: `${U}leads-rules.test.ts`, title: "jusqu'au seuil de qualification" },
     ],
   },

@@ -65,7 +65,8 @@ describe.skipIf(!hasDb)("opportunités et conversion (PostgreSQL)", () => {
       phone: `07${String(Math.floor(Math.random() * 1e8)).padStart(8, "0")}`,
       email: `yao-${id}@prospect.ci`,
       jobTitle: "Directeur général",
-      insertedOn: new Date(Date.UTC(2026, 9, 1)),
+      // Un prospect saisi dans le CRM porte la date du jour (UTC).
+      insertedOn: new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())),
       progress: 40,
       wonConfirmed: false,
       forceDuplicate: false,

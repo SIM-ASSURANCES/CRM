@@ -35,6 +35,12 @@ describe.skipIf(!hasDb)("service des prospects (PostgreSQL)", () => {
     return { id: user.id, name: user.name, email: user.email, role, teamId: null, mustChangePassword: false };
   }
 
+  /** Date du jour à minuit UTC : la date d'insertion d'un prospect saisi dans le CRM. */
+  const todayUtc = (offsetDays = 0) => {
+    const now = new Date();
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + offsetDays));
+  };
+
   // Un prospect aux coordonnées uniques (sinon la détection de doublons se déclenche entre les tests).
   function leadInput(over: Partial<CreateLeadInput> = {}): CreateLeadInput {
     const id = randomUUID().slice(0, 8);
@@ -46,7 +52,7 @@ describe.skipIf(!hasDb)("service des prospects (PostgreSQL)", () => {
       phone: `07${String(Math.floor(Math.random() * 1e8)).padStart(8, "0")}`,
       email: `yao-${id}@client.ci`,
       jobTitle: "Directeur général",
-      insertedOn: new Date(Date.UTC(2026, 9, 1)),
+      insertedOn: todayUtc(),
       progress: 10,
       wonConfirmed: false,
       forceDuplicate: false,
@@ -120,6 +126,61 @@ describe.skipIf(!hasDb)("service des prospects (PostgreSQL)", () => {
       await expect(
         svc.createLead(a, leadInput({ progress: 60, productId: randomUUID(), expectedRevenue: 1 })),
       ).rejects.toMatchObject({ code: "VALIDATION" });
+    });
+  });
+
+  describe("date d'insertion saisie dans le CRM", () => {
+    it("n'accepte que la date du jour : ni passée ni future", async () => {
+      await expect(svc.createLead(a, leadInput({ insertedOn: todayUtc() }))).resolves.toMatchObject({ status: "open" });
+
+      for (const offset of [-1, -30, 1, 30]) {
+        await expect(svc.createLead(a, leadInput({ insertedOn: todayUtc(offset) })), `décalage ${offset} j`).rejects.toMatchObject({
+          code: "VALIDATION",
+          details: { fieldErrors: { insertedOn: [expect.stringContaining("celle du jour")] } },
+        });
+      }
+      // Rien n'a été écrit pour les refus : un seul prospect existe.
+      expect(await db.lead.count()).toBe(1);
+    });
+
+    it("compare à la date fournie par l'horloge de l'appelant (UTC), pas à celle de la machine", async () => {
+      const clock = new Date("2026-03-05T23:30:00.000Z");
+      await expect(svc.createLead(a, leadInput({ insertedOn: new Date("2026-03-05T00:00:00.000Z") }), clock)).resolves.toMatchObject({ status: "open" });
+      await expect(svc.createLead(a, leadInput({ insertedOn: new Date("2026-03-06T00:00:00.000Z") }), clock)).rejects.toMatchObject({ code: "VALIDATION" });
+    });
+
+    it("refuse de modifier la date d'insertion d'un prospect, mais laisse modifier le reste", async () => {
+      const base = leadInput();
+      const { id } = await svc.createLead(a, base);
+
+      await expect(svc.updateLead(a, { ...base, id, version: 1, insertedOn: todayUtc(-3) })).rejects.toMatchObject({
+        code: "VALIDATION",
+        details: { fieldErrors: { insertedOn: ["La date d'insertion ne peut pas être modifiée."] } },
+      });
+      await expect(svc.updateLead(a, { ...base, id, version: 1, jobTitle: "Directrice" })).resolves.toMatchObject({ status: "open" });
+    });
+
+    it("laisse modifier un prospect ancien (importé, date historique) tant que sa date ne change pas", async () => {
+      const oldDate = new Date(Date.UTC(2026, 8, 1));
+      const base = leadInput({ insertedOn: oldDate });
+      const old = await db.lead.create({
+        data: {
+          companyName: base.companyName,
+          sector: base.sector,
+          contactLastName: base.contactLastName,
+          contactFirstName: base.contactFirstName,
+          phone: base.phone,
+          email: base.email,
+          jobTitle: base.jobTitle,
+          insertedOn: oldDate,
+          progress: 10,
+          status: "open",
+          ownerUserId: a.id,
+        },
+      });
+
+      await expect(svc.updateLead(a, { ...base, id: old.id, version: 1, jobTitle: "Directeur adjoint" })).resolves.toMatchObject({ status: "open" });
+      await expect(svc.updateLead(a, { ...base, id: old.id, version: 2, insertedOn: todayUtc() })).rejects.toMatchObject({ code: "VALIDATION" });
     });
   });
 

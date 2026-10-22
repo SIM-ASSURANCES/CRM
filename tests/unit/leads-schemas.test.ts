@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { createLeadSchema, formDataToObject, markLostSchema } from "@/features/leads/schemas";
+import {
+  createLeadSchema,
+  formDataToObject,
+  INSERTED_ON_TODAY_MESSAGE,
+  leadFieldsSchema,
+  markLostSchema,
+} from "@/features/leads/schemas";
+
+/** Date du jour (UTC) décalée de `offsetDays` jours, au format AAAA-MM-JJ : la règle dépend du calendrier, rien n'est figé. */
+const dayOffset = (offsetDays: number) => new Date(Date.now() + offsetDays * 86_400_000).toISOString().slice(0, 10);
+const TODAY = dayOffset(0);
 
 // Valeurs telles que les envoie un formulaire HTML : tout est du texte, les champs vides sont « ».
 const valid = {
@@ -10,7 +20,7 @@ const valid = {
   phone: "07 07 35 36 73",
   email: "Koffi.Gado@Client.CI",
   jobTitle: "Responsable achats",
-  insertedOn: "2026-10-01",
+  insertedOn: TODAY,
   progress: "20",
   productId: "",
   expectedRevenue: "",
@@ -31,14 +41,30 @@ describe("createLeadSchema", () => {
     expect(result.data.progress).toBe(20);
     expect(result.data.productId).toBeUndefined();
     expect(result.data.expectedRevenue).toBeUndefined();
-    expect(result.data.insertedOn).toEqual(new Date("2026-10-01T00:00:00.000Z"));
+    expect(result.data.insertedOn).toEqual(new Date(`${TODAY}T00:00:00.000Z`));
     expect(result.data.wonConfirmed).toBe(false);
   });
 
-  it("refuse une date d'insertion postérieure à la date du jour (règle de l'Excel)", () => {
-    expect(messages({ ...valid, insertedOn: "2999-01-01" })).toContain(
-      "La date d'insertion ne peut pas être postérieure à la date du jour.",
-    );
+  it("n'accepte que la date du jour : ni une date passée, ni une date future", () => {
+    expect(createLeadSchema.safeParse({ ...valid, insertedOn: TODAY }).success).toBe(true);
+    for (const offset of [-1, -7, -365, 1, 7, 3650]) {
+      expect(messages({ ...valid, insertedOn: dayOffset(offset) }), `décalage ${offset} j`).toContain(INSERTED_ON_TODAY_MESSAGE);
+    }
+  });
+
+  it("refuse une date illisible", () => {
+    expect(messages({ ...valid, insertedOn: "demain" })).toContain("Date d'insertion invalide.");
+  });
+
+  it("garde la règle « jamais postérieure à aujourd'hui » pour les schémas sans exigence de jour (modification, import)", () => {
+    const fields = { ...valid, insertedOn: dayOffset(7) };
+    const result = leadFieldsSchema.safeParse(fields);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((i) => i.message)).toContain("La date d'insertion ne peut pas être postérieure à la date du jour.");
+    }
+    // Une date passée reste acceptée par ce schéma (fiche ancienne qu'on modifie, ligne importée).
+    expect(leadFieldsSchema.safeParse({ ...valid, insertedOn: dayOffset(-30) }).success).toBe(true);
   });
 
   it("refuse un secteur hors liste, une étape inconnue, un e-mail et un téléphone invalides", () => {

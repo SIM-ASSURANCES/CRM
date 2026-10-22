@@ -9,7 +9,7 @@ import {
 } from "@/features/leads/config";
 import { validateLeadRules, type FieldErrors } from "@/features/leads/rules";
 import { leadScopeWhere } from "@/features/leads/scope";
-import type { CreateLeadInput, MarkLostInput, UpdateLeadInput } from "@/features/leads/schemas";
+import { INSERTED_ON_TODAY_MESSAGE, type CreateLeadInput, type MarkLostInput, type UpdateLeadInput } from "@/features/leads/schemas";
 import { destinationViews, viewWhere, type LeadView } from "@/features/leads/views";
 import { writeAudit } from "@/lib/audit";
 import { can, type Permission } from "@/lib/auth/permissions";
@@ -140,6 +140,19 @@ function assertRules(input: Parameters<typeof validateLeadRules>[0], thresholds:
   if (fieldErrors) throw errors.validation("Certaines informations sont manquantes.", { fieldErrors });
 }
 
+function insertedOnError(message: string): never {
+  throw errors.validation(message, { fieldErrors: { insertedOn: [message] } });
+}
+
+/**
+ * Un prospect saisi dans le CRM porte la date du jour (UTC) : ni passée ni future. Contrôle serveur, indépendant du formulaire.
+ * L'import de données (migration) ne passe pas par ici : il reprend les dates historiques de la source.
+ */
+function assertInsertedToday(insertedOn: Date, now: Date): void {
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  if (insertedOn.getTime() !== today) insertedOnError(INSERTED_ON_TODAY_MESSAGE);
+}
+
 async function assertActiveProduct(tx: Prisma.TransactionClient, productId?: string): Promise<void> {
   if (!productId) return;
   const product = await tx.product.findFirst({ where: { id: productId, active: true }, select: { id: true } });
@@ -237,8 +250,9 @@ export async function findDuplicates(
 
 // --- Écriture ----------------------------------------------------------------------------------------------------
 
-export async function createLead(user: CurrentUser, input: CreateLeadInput): Promise<LeadMutationResult> {
+export async function createLead(user: CurrentUser, input: CreateLeadInput, now: Date = new Date()): Promise<LeadMutationResult> {
   assertCan(user, "prospect:write");
+  assertInsertedToday(input.insertedOn, now);
   const thresholds = await getThresholds();
   assertRules(input, thresholds);
 
@@ -310,6 +324,8 @@ export async function updateLead(user: CurrentUser, input: UpdateLeadInput): Pro
     if (existing.status !== "open") {
       throw errors.validation("Ce prospect est clôturé (gagné ou perdu) : il ne peut plus être modifié.");
     }
+    // La date d'insertion fixe la semaine du prospect dans les KPI et l'historique : elle ne se modifie pas après coup.
+    if (existing.insertedOn.getTime() !== input.insertedOn.getTime()) insertedOnError("La date d'insertion ne peut pas être modifiée.");
     await assertActiveProduct(tx, input.productId);
 
     const won = input.progress === 100;

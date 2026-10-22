@@ -104,7 +104,20 @@ export function LeadForm({ mode, products, thresholds, today, initial, leadId, v
 
       <fieldset className="grid gap-5 sm:grid-cols-2">
         <legend className="mb-4 text-lg font-semibold text-ink">Suivi commercial</legend>
-        <Field label="Date d'insertion" name="insertedOn" type="date" max={today} required defaultValue={values.insertedOn} error={error("insertedOn")} />
+        {/* Non modifiable : la date d'insertion d'un nouveau prospect est celle du jour (ni passée ni future), et elle ne change
+            plus ensuite. Le champ reste envoyé avec le formulaire (readOnly, pas disabled) ; le serveur revérifie la règle. */}
+        <Field
+          label={mode === "create" ? "Date d'insertion (date du jour)" : "Date d'insertion (non modifiable)"}
+          name="insertedOn"
+          type="date"
+          readOnly
+          min={mode === "create" ? today : undefined}
+          max={today}
+          required
+          className="cursor-not-allowed bg-surface text-ink-soft"
+          defaultValue={values.insertedOn}
+          error={error("insertedOn")}
+        />
         <div>
           <SelectField
             label="Process de vente"
