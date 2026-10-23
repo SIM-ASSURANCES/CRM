@@ -1,6 +1,7 @@
 import { connection } from "next/server";
 import { completeMicrosoftConnection } from "@/features/integrations/connection";
 import { defaultDeps, loadIntegrationSetup } from "@/features/integrations/setup";
+import { isFeatureEnabled } from "@/features/modules/service";
 import { getCurrentUser } from "@/lib/auth/session";
 import { env } from "@/lib/env";
 import { AppError } from "@/lib/errors";
@@ -16,6 +17,9 @@ export async function GET(request: Request) {
   await connection();
   const user = await getCurrentUser();
   if (!user) return Response.redirect(new URL("/login", env.BETTER_AUTH_URL), 303);
+
+  // Fonctionnalité désactivée : aucune connexion ne peut aboutir, et la page /integrations répond « introuvable ».
+  if (!(await isFeatureEnabled("messagerie"))) return new Response(null, { status: 404 });
 
   const setup = loadIntegrationSetup();
   if (!setup) return back("erreur=config");

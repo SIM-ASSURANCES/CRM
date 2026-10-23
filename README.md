@@ -185,17 +185,39 @@ l'application : logotype coloré pour fonds blancs, pictogramme seul (blanc et e
 Les variantes colorées sont **dérivées** : si le fichier officiel du logotype en couleurs est fourni, le déposer dans `public/`
 sous le nom `logosim-couleur.webp` et ne plus lancer le script.
 
+## Activation des fonctionnalités (administrateur)
+
+**Administration → Fonctionnalités** (`/admin/fonctionnalites`, permission `settings:manage`) permet d'activer ou de
+désactiver, **pour tous les utilisateurs**, dix fonctionnalités : Comptes, Contacts, Opportunités, Tâches, Activités,
+Messagerie Microsoft 365, Prospects (les cinq écrans), Prévisions, Historique des prospects et Motifs de perte. Les
+droits de chaque rôle ne changent pas : c'est un interrupteur global, en plus.
+
+- Effet immédiat : l'entrée disparaît du menu et tous les écrans de la fonctionnalité répondent « page introuvable »
+  (garde `FeatureGate` dans le `layout.tsx` de chaque segment). Les exports de rapports (`/api/reports/export`) répondent
+  404, la synchronisation planifiée de la messagerie ne lit plus rien, le webhook Microsoft accuse réception sans traiter.
+- Les données sont conservées : réactiver rend tout tel quel. Le tableau de bord et l'administration (dont cet écran) ne
+  sont jamais désactivables, pour qu'un administrateur ne s'enferme pas dehors.
+- Stockage : une ligne de la table `settings` par fonctionnalité (`features.<clé>` = `{ "enabled": false }`) ; sans ligne,
+  la fonctionnalité est active (valeur par défaut, y compris pour une fonctionnalité ajoutée plus tard). Chaque
+  changement est écrit au journal d'audit (`feature.enabled` / `feature.disabled`).
+- Limite connue : c'est un interrupteur de produit, pas une frontière d'autorisation. Les Server Actions d'un module
+  désactivé ne sont pas bloquées une à une (elles ne sont plus atteignables depuis l'interface) ; les liens du tableau de
+  bord vers une fonctionnalité désactivée mènent à une page introuvable.
+- Ajouter une fonctionnalité : l'inscrire dans `src/features/modules/config.ts`, créer le `layout.tsx` du segment avec
+  `<FeatureGate feature="…">` et rattacher l'entrée de menu (`feature` dans `nav-config.ts`) ; le test
+  `tests/unit/features-config.test.ts` vérifie la cohérence.
+
 ## Déploiement (Docker, Dokploy)
 
-Image `ghcr.io/sim-assurances/crm:v2` (`Dockerfile`, `docker-entrypoint.sh`), publiée sur `https://crm.mysimassurances.com`
+Image `ghcr.io/sim-assurances/crm:v3` (`Dockerfile`, `docker-entrypoint.sh`), publiée sur `https://crm.mysimassurances.com`
 avec `docker-compose.raw.yml` (Dokploy → Compose → Raw). Au déploiement, tout est automatique : migrations, création du
 premier administrateur (mot de passe temporaire généré et affiché une fois dans les journaux s'il n'est pas fourni),
 domaine HTTPS et tâches planifiées. Variables d'environnement, mise à jour, sauvegarde et retour arrière : voir
 [docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md).
 
 ```bash
-docker build -t ghcr.io/sim-assurances/crm:v2 .
-docker push ghcr.io/sim-assurances/crm:v2
+docker build -t ghcr.io/sim-assurances/crm:v3 .
+docker push ghcr.io/sim-assurances/crm:v3
 ```
 
 ## Migration de données (phase 7)

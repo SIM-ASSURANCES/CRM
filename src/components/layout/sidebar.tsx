@@ -12,18 +12,22 @@ import { cn } from "@/lib/utils";
 
 type SidebarProps = {
   role: Role;
+  /** Fonctionnalités désactivées par l'administrateur : leurs entrées de menu sont masquées. */
+  disabledFeatures?: readonly string[];
   collapsed: boolean;
   onToggle: () => void;
 };
 
-export function Sidebar({ role, collapsed, onToggle }: SidebarProps) {
+export function Sidebar({ role, disabledFeatures = [], collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
   // Sous 768 px la barre est toujours repliée ; le libellé est masqué par CSS (max-md).
   const hideLabel = collapsed ? "hidden" : "max-md:hidden";
 
   const groups = NAV_GROUPS.map((group) => ({
     ...group,
-    items: group.items.filter((item) => can(role, item.permission)),
+    items: group.items.filter(
+      (item) => can(role, item.permission) && !(item.feature && disabledFeatures.includes(item.feature)),
+    ),
   })).filter((group) => group.items.length > 0);
 
   return (

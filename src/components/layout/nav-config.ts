@@ -15,6 +15,7 @@ import {
   ScrollText,
   Send,
   Target,
+  ToggleRight,
   TrendingUp,
   UserCheck,
   UserCog,
@@ -23,6 +24,7 @@ import {
   Workflow,
   type LucideIcon,
 } from "lucide-react";
+import type { FeatureKey } from "@/features/modules/config";
 import type { Permission } from "@/lib/auth/permissions";
 
 // Navigation pilotée par la configuration : chaque entrée n'apparaît que si le rôle possède la permission.
@@ -34,6 +36,8 @@ export type NavItem = {
   label: string;
   icon: LucideIcon;
   permission: Permission;
+  /** Fonctionnalité activable : l'entrée disparaît quand l'administrateur la désactive pour tous. */
+  feature?: FeatureKey;
   /** Page courante → l'entrée est-elle active ? Par défaut : le chemin commence par `href`. */
   match?: (pathname: string) => boolean;
 };
@@ -61,17 +65,17 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Clients",
     items: [
-      { href: "/comptes", label: "Comptes", icon: Building2, permission: "account:read" },
-      { href: "/contacts", label: "Contacts", icon: ContactRound, permission: "contact:read" },
-      { href: "/opportunites", label: "Opportunités", icon: Handshake, permission: "opportunity:read" },
+      { href: "/comptes", label: "Comptes", icon: Building2, permission: "account:read", feature: "comptes" },
+      { href: "/contacts", label: "Contacts", icon: ContactRound, permission: "contact:read", feature: "contacts" },
+      { href: "/opportunites", label: "Opportunités", icon: Handshake, permission: "opportunity:read", feature: "opportunites" },
     ],
   },
   {
     label: "Suivi",
     items: [
-      { href: "/taches", label: "Tâches", icon: ListChecks, permission: "task:read" },
-      { href: "/activites", label: "Activités", icon: Activity, permission: "activity:read" },
-      { href: "/integrations", label: "Messagerie", icon: Mail, permission: "integration:connect" },
+      { href: "/taches", label: "Tâches", icon: ListChecks, permission: "task:read", feature: "taches" },
+      { href: "/activites", label: "Activités", icon: Activity, permission: "activity:read", feature: "activites" },
+      { href: "/integrations", label: "Messagerie", icon: Mail, permission: "integration:connect", feature: "messagerie" },
     ],
   },
   {
@@ -82,24 +86,25 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "Reporting prospect",
         icon: Users,
         permission: "prospect:read",
+        feature: "prospects",
         // La liste, le formulaire de création et la fiche d'un prospect appartiennent à cet écran.
         match: (pathname) =>
           pathname === "/prospects" ||
           pathname === "/prospects/nouveau" ||
           new RegExp(`^/prospects/${UUID}`).test(pathname),
       },
-      { href: "/prospects/qualifies", label: "Prospects qualifiés", icon: UserCheck, permission: "prospect:read" },
-      { href: "/prospects/propositions", label: "Propositions envoyées", icon: Send, permission: "prospect:read" },
-      { href: "/prospects/pipeline", label: "Valeur du pipeline", icon: TrendingUp, permission: "prospect:read" },
-      { href: "/prospects/gagnes", label: "Taux de transformation", icon: Percent, permission: "prospect:read" },
+      { href: "/prospects/qualifies", label: "Prospects qualifiés", icon: UserCheck, permission: "prospect:read", feature: "prospects" },
+      { href: "/prospects/propositions", label: "Propositions envoyées", icon: Send, permission: "prospect:read", feature: "prospects" },
+      { href: "/prospects/pipeline", label: "Valeur du pipeline", icon: TrendingUp, permission: "prospect:read", feature: "prospects" },
+      { href: "/prospects/gagnes", label: "Taux de transformation", icon: Percent, permission: "prospect:read", feature: "prospects" },
     ],
   },
   {
     label: "Reporting",
     items: [
-      { href: "/rapports/previsions", label: "Prévisions", icon: ChartColumn, permission: "report:read" },
-      { href: "/rapports/prospects", label: "Historique des prospects", icon: ChartLine, permission: "report:read" },
-      { href: "/rapports/pertes", label: "Motifs de perte", icon: ChartPie, permission: "report:read" },
+      { href: "/rapports/previsions", label: "Prévisions", icon: ChartColumn, permission: "report:read", feature: "previsions" },
+      { href: "/rapports/prospects", label: "Historique des prospects", icon: ChartLine, permission: "report:read", feature: "historique_prospects" },
+      { href: "/rapports/pertes", label: "Motifs de perte", icon: ChartPie, permission: "report:read", feature: "motifs_perte" },
     ],
   },
   {
@@ -110,6 +115,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/admin/equipes", label: "Équipes", icon: UsersRound, permission: "user:manage" },
       { href: "/admin/objectifs", label: "Objectifs commerciaux", icon: Target, permission: "target:manage" },
       { href: "/admin/automatisations", label: "Automatisations", icon: Workflow, permission: "settings:manage" },
+      { href: "/admin/fonctionnalites", label: "Fonctionnalités", icon: ToggleRight, permission: "settings:manage" },
       { href: "/admin/import", label: "Import de données", icon: FileUp, permission: "import:run" },
       { href: "/admin/audit", label: "Journal d'audit", icon: ScrollText, permission: "audit:read" },
     ],

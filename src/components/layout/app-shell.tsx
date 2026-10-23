@@ -12,11 +12,19 @@ type AppShellProps = {
   pendingResetRequests?: number;
   /** Notifications non lues de l'utilisateur (centre de notifications). */
   unreadNotifications?: number;
+  /** Fonctionnalités désactivées pour tous les utilisateurs (réglage administrateur). */
+  disabledFeatures?: readonly string[];
   children: ReactNode;
 };
 
 /** Gabarit des pages connectées : barre latérale repliable + en-tête + zone de contenu. */
-export function AppShell({ user, pendingResetRequests = 0, unreadNotifications = 0, children }: AppShellProps) {
+export function AppShell({
+  user,
+  pendingResetRequests = 0,
+  unreadNotifications = 0,
+  disabledFeatures = [],
+  children,
+}: AppShellProps) {
   const [collapsed, setCollapsed] = useSidebarCollapsed();
   const total = pendingResetRequests + unreadNotifications;
   const parts = [
@@ -33,7 +41,12 @@ export function AppShell({ user, pendingResetRequests = 0, unreadNotifications =
       >
         Aller au contenu
       </a>
-      <Sidebar role={user.role} collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
+      <Sidebar
+        role={user.role}
+        disabledFeatures={disabledFeatures}
+        collapsed={collapsed}
+        onToggle={() => setCollapsed(!collapsed)}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header
           user={user}

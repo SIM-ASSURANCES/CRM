@@ -1,6 +1,6 @@
 # Déploiement du CRM (Docker + Dokploy)
 
-Image : `ghcr.io/sim-assurances/crm:v2` · Domaine : **`https://crm.mysimassurances.com`** · Port du conteneur : **3000**
+Image : `ghcr.io/sim-assurances/crm:v3` · Domaine : **`https://crm.mysimassurances.com`** · Port du conteneur : **3000**
 Fichier de déploiement : [`docker-compose.raw.yml`](../docker-compose.raw.yml) (Dokploy → Compose → Provider **Raw**)
 
 **Au déploiement, tout se fait automatiquement :**
@@ -80,9 +80,9 @@ Microsoft 365 : URI de redirection Azure `https://crm.mysimassurances.com/api/in
 ## 6. Construire et publier l'image (poste de développement)
 
 ```bash
-docker build -t ghcr.io/sim-assurances/crm:v2 .
+docker build -t ghcr.io/sim-assurances/crm:v3 .
 docker login ghcr.io            # utilisateur GitHub + jeton (PAT) avec le droit write:packages
-docker push ghcr.io/sim-assurances/crm:v2
+docker push ghcr.io/sim-assurances/crm:v3
 ```
 
 Le Dockerfile utilise des valeurs factices uniquement pendant la compilation ; aucune variable réelle n'entre dans l'image.

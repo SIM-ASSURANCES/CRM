@@ -1,4 +1,5 @@
 import { connection } from "next/server";
+import { isFeatureEnabled } from "@/features/modules/service";
 import { exportReport } from "@/features/reporting/export";
 import { exportRequestSchema, parseForecastParams, parseLossParams } from "@/features/reporting/schemas";
 import { apiUser, fileResponse } from "@/lib/api";
@@ -17,6 +18,9 @@ export async function GET(request: Request) {
     const params = new URL(request.url).searchParams;
     const kind = exportRequestSchema.safeParse({ report: params.get("report"), format: params.get("format") });
     if (!kind.success) throw errors.validation("Rapport ou format d'export invalide.");
+    // Un export dont l'écran est désactivé par l'administrateur n'existe plus (même réponse qu'une page introuvable).
+    const feature = kind.data.report === "losses" ? "motifs_perte" : "previsions";
+    if (!(await isFeatureEnabled(feature))) throw errors.notFound();
 
     let result;
     if (kind.data.report === "losses") {

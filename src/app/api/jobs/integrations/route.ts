@@ -2,6 +2,7 @@ import { connection } from "next/server";
 import { defaultDeps, loadIntegrationSetup } from "@/features/integrations/setup";
 import { maintainSubscriptions } from "@/features/integrations/subscriptions";
 import { runDueSyncs } from "@/features/integrations/sync";
+import { isFeatureEnabled } from "@/features/modules/service";
 import { rejectUnauthorizedCron } from "@/lib/cron";
 import { logger } from "@/lib/logger";
 
@@ -17,6 +18,8 @@ export async function POST(request: Request) {
   const setup = loadIntegrationSetup();
   // Intégration non configurée : rien à faire, ce n'est pas une erreur du planificateur.
   if (!setup) return Response.json({ status: "disabled" });
+  // Fonctionnalité désactivée par l'administrateur : aucune lecture de messagerie tant qu'elle l'est.
+  if (!(await isFeatureEnabled("messagerie"))) return Response.json({ status: "disabled" });
 
   try {
     const deps = defaultDeps(setup);

@@ -1,5 +1,6 @@
 import { connection } from "next/server";
 import { handleNotifications, MAX_WEBHOOK_BODY_BYTES } from "@/features/integrations/webhook";
+import { isFeatureEnabled } from "@/features/modules/service";
 import { getRequestContext } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 import { rateLimit } from "@/lib/rate-limit";
@@ -28,6 +29,10 @@ export async function POST(request: Request) {
     if (validationToken.length === 0 || validationToken.length > MAX_VALIDATION_TOKEN) return new Response(null, { status: 400 });
     return new Response(validationToken, { status: 200, headers: TEXT });
   }
+
+  // Fonctionnalité désactivée : on accuse réception sans rien traiter (un 4xx ferait supprimer l'abonnement par Microsoft ;
+  // la lecture planifiée rattrapera tout à la réactivation).
+  if (!(await isFeatureEnabled("messagerie"))) return new Response(null, { status: 202 });
 
   const declared = Number(request.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > MAX_WEBHOOK_BODY_BYTES) return new Response(null, { status: 413 });
