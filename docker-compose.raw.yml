@@ -33,7 +33,7 @@ services:
       retries: 10
 
   app:
-    image: ghcr.io/sim-assurances/crm:v3
+    image: ghcr.io/sim-assurances/crm:v4
     restart: unless-stopped
     depends_on:
       db:
@@ -43,6 +43,8 @@ services:
       - path: .env
         required: false
     environment:
+      # Port d'écoute du conteneur (l'image écoute sur 3000 par défaut) ; Traefik et le planificateur visent le même.
+      PORT: "3001"
       DATABASE_URL: postgresql://${POSTGRES_USER:-crm}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-crm}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET est obligatoire (32 caractères minimum)}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-https://crm.mysimassurances.com}
@@ -54,7 +56,7 @@ services:
       SEED_ADMIN_NAME: Administrateur CRM
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
     expose:
-      - "3000"
+      - "3001"
     # Routage Traefik (Dokploy) écrit ici : le domaine fonctionne SANS passer par l'onglet Domains. Ne pas ajouter ce
     # même domaine dans l'onglet Domains en plus (les deux se contrediraient).
     labels:
@@ -65,7 +67,7 @@ services:
       - traefik.http.routers.crm.entrypoints=websecure
       - traefik.http.routers.crm.tls.certresolver=letsencrypt
       - traefik.http.routers.crm.service=crm
-      - traefik.http.services.crm.loadbalancer.server.port=3000
+      - traefik.http.services.crm.loadbalancer.server.port=3001
       # HTTP -> redirection vers HTTPS
       - traefik.http.routers.crm-http.rule=Host(`crm.mysimassurances.com`)
       - traefik.http.routers.crm-http.entrypoints=web
@@ -100,10 +102,10 @@ services:
           sleep 900
           tick=$$((tick + 1))
           if [ -n "$$MS_CLIENT_ID" ]; then
-            curl -fsS -m 300 -X POST -H "Authorization: Bearer $$CRON_SECRET" http://app:3000/api/jobs/integrations > /dev/null || echo "Echec : synchronisations"
+            curl -fsS -m 300 -X POST -H "Authorization: Bearer $$CRON_SECRET" http://app:3001/api/jobs/integrations > /dev/null || echo "Echec : synchronisations"
           fi
           if [ $$((tick % 4)) -eq 0 ]; then
-            curl -fsS -m 300 -X POST -H "Authorization: Bearer $$CRON_SECRET" http://app:3000/api/jobs/automations > /dev/null || echo "Echec : relances"
+            curl -fsS -m 300 -X POST -H "Authorization: Bearer $$CRON_SECRET" http://app:3001/api/jobs/automations > /dev/null || echo "Echec : relances"
           fi
         done
 

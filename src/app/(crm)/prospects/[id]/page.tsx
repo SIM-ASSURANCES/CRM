@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { z } from "zod";
 import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { LeadForm } from "@/app/(crm)/prospects/_components/lead-form";
+import { DeleteLeadDialog } from "@/app/(crm)/prospects/_components/delete-lead-dialog";
 import { LostDialog } from "@/app/(crm)/prospects/_components/lost-dialog";
 import { buttonClasses } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -78,6 +79,9 @@ async function LeadContent({ params }: { params: Promise<{ id: string }> }) {
     can(user.role, "account:write") &&
     can(user.role, "contact:write") &&
     can(user.role, "opportunity:write");
+  const deleteButton = can(user.role, "prospect:delete") && (
+    <DeleteLeadDialog leadId={lead.id} companyName={lead.companyName} converted={converted} />
+  );
   const opportunityLink = lead.convertedOpportunityId && can(user.role, "opportunity:read") && (
     <Link href={`/opportunites/${lead.convertedOpportunityId}`} className={buttonClasses("secondary")}>
       Voir l&apos;opportunité
@@ -98,7 +102,14 @@ async function LeadContent({ params }: { params: Promise<{ id: string }> }) {
                   ? "Prospect perdu : clôturé."
                   : "Consultation en lecture seule."
           }
-          actions={opportunityLink || undefined}
+          actions={
+            opportunityLink || deleteButton ? (
+              <div className="flex flex-wrap items-center gap-3">
+                {opportunityLink}
+                {deleteButton}
+              </div>
+            ) : undefined
+          }
         />
         <div className="rounded-2xl border border-line bg-white p-6 md:p-8">
           <ReadOnlySummary lead={lead} />
@@ -123,6 +134,7 @@ async function LeadContent({ params }: { params: Promise<{ id: string }> }) {
               </Link>
             )}
             <LostDialog leadId={lead.id} version={lead.version} companyName={lead.companyName} />
+            {deleteButton}
           </div>
         }
       />

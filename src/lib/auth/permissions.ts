@@ -8,6 +8,8 @@ export const PERMISSIONS = [
   "dashboard:read",
   "prospect:read",
   "prospect:write",
+  // Supprimer définitivement un prospect et son historique (manager : son équipe ; administrateur : tous). Tracé dans l'audit.
+  "prospect:delete",
   "account:read",
   "account:write",
   // Changer le propriétaire commercial d'un compte ou d'une opportunité (changement tracé, CDC 5.1).
@@ -69,6 +71,7 @@ const MATRIX: Record<Role, readonly Permission[]> = {
     "dashboard:read",
     "prospect:read",
     "prospect:write",
+    "prospect:delete",
     "account:read",
     "account:write",
     "account:assign",

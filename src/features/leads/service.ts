@@ -404,6 +404,46 @@ export async function updateLead(user: CurrentUser, input: UpdateLeadInput): Pro
   });
 }
 
+/**
+ * Suppression DÉFINITIVE d'un prospect et de son historique (événements d'étape). Réservée à `prospect:delete` (manager :
+ * prospects de son équipe ; administrateur : tous). Un prospect hors périmètre est présenté comme introuvable.
+ * Un compte, un contact ou une opportunité créés par conversion ne sont pas touchés. L'audit garde un instantané minimal
+ * (entreprise, responsable, étape, statut), sans nom, téléphone ni e-mail ; il est écrit dans la même transaction.
+ */
+export async function deleteLead(user: CurrentUser, id: string): Promise<{ id: string; companyName: string }> {
+  assertCan(user, "prospect:delete");
+
+  return db.$transaction(async (tx) => {
+    const existing = await tx.lead.findFirst({ where: { AND: [{ id }, leadScopeWhere(user)] } });
+    if (!existing) throw errors.notFound("Prospect introuvable.");
+
+    const events = await tx.leadEvent.deleteMany({ where: { leadId: existing.id } });
+    const removed = await tx.lead.deleteMany({ where: { id: existing.id } });
+    if (removed.count === 0) throw errors.notFound("Prospect introuvable.");
+
+    await writeAudit(
+      {
+        actorUserId: user.id,
+        action: "lead.deleted",
+        entityType: "lead",
+        entityId: existing.id,
+        metadata: {
+          companyName: existing.companyName,
+          ownerUserId: existing.ownerUserId,
+          progress: existing.progress,
+          status: existing.status,
+          insertedOn: existing.insertedOn.toISOString().slice(0, 10),
+          converted: Boolean(existing.convertedAt),
+          eventsRemoved: events.count,
+        },
+      },
+      tx,
+    );
+
+    return { id: existing.id, companyName: existing.companyName };
+  });
+}
+
 export async function markLost(user: CurrentUser, input: MarkLostInput): Promise<LeadMutationResult> {
   assertCan(user, "prospect:write");
 

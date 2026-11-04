@@ -18,6 +18,7 @@ function first(value: string | string[] | undefined): string | undefined {
 function flashMessage(ok: string | undefined, to: string | undefined): string | null {
   if (ok === "created") return "Prospect enregistré.";
   if (ok === "lost") return "Prospect marqué comme perdu.";
+  if (ok === "deleted") return "Prospect supprimé définitivement.";
   if (ok === "updated") {
     const destinations = (to ?? "")
       .split(",")

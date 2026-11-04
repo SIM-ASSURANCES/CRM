@@ -5,7 +5,7 @@
 #   builder : génération du client Prisma puis `next build`
 #   runner  : image d'exécution, utilisateur non-root, migrations appliquées au démarrage (voir docker-entrypoint.sh)
 #
-# Construire :  docker build -t ghcr.io/sim-assurances/crm:v3 .
+# Construire :  docker build -t ghcr.io/sim-assurances/crm:v4 .
 # Voir docs/DEPLOIEMENT.md pour les variables d'environnement et le déploiement sur Dokploy.
 
 ARG NODE_VERSION=24

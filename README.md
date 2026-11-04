@@ -97,6 +97,11 @@ Code métier dans `src/features/leads/` : `config` (étapes, seuils, motifs de p
 - Les KPI comparent la semaine courante à la précédente ; leurs définitions sont documentées dans `kpi.ts`.
 - `npm run db:seed` crée 7 produits et, en développement, 12 prospects de démonstration pour `commercial@crm.local`
   avec un historique sur 5 semaines.
+- **Suppression définitive** (`prospect:delete`, bouton « Supprimer » de la fiche, avec confirmation) : le manager supprime
+  les prospects de son équipe, l'administrateur tous ; la direction, le commercial et l'audit ne le peuvent pas. Le prospect
+  et son historique d'étapes sont supprimés (les statistiques des semaines passées ne le comptent plus) ; le compte, le
+  contact et l'opportunité créés par une conversion sont conservés. L'audit (`lead.deleted`) garde entreprise, responsable,
+  étape et statut, sans nom, téléphone ni e-mail. Un prospect hors périmètre est « introuvable ».
 
 ## Comptes et contacts (phase 4, sprint 4.2)
 
@@ -209,15 +214,15 @@ droits de chaque rôle ne changent pas : c'est un interrupteur global, en plus.
 
 ## Déploiement (Docker, Dokploy)
 
-Image `ghcr.io/sim-assurances/crm:v3` (`Dockerfile`, `docker-entrypoint.sh`), publiée sur `https://crm.mysimassurances.com`
+Image `ghcr.io/sim-assurances/crm:v4` (`Dockerfile`, `docker-entrypoint.sh`), publiée sur `https://crm.mysimassurances.com`
 avec `docker-compose.raw.yml` (Dokploy → Compose → Raw). Au déploiement, tout est automatique : migrations, création du
 premier administrateur (mot de passe temporaire généré et affiché une fois dans les journaux s'il n'est pas fourni),
 domaine HTTPS et tâches planifiées. Variables d'environnement, mise à jour, sauvegarde et retour arrière : voir
 [docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md).
 
 ```bash
-docker build -t ghcr.io/sim-assurances/crm:v3 .
-docker push ghcr.io/sim-assurances/crm:v3
+docker build -t ghcr.io/sim-assurances/crm:v4 .
+docker push ghcr.io/sim-assurances/crm:v4
 ```
 
 ## Migration de données (phase 7)

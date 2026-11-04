@@ -10,6 +10,7 @@ import {
 } from "@/features/leads/schemas";
 import {
   createLead,
+  deleteLead,
   markLost,
   updateLead,
   type DuplicateMatch,
@@ -92,6 +93,20 @@ export async function updateLeadAction(_previous: LeadFormState, formData: FormD
     return failure(error, values);
   }
   redirect(afterSaveUrl("updated", result));
+}
+
+/** Suppression définitive : l'identifiant est validé avant d'atteindre la base ; retour à la liste avec confirmation. */
+export async function deleteLeadAction(_previous: LeadFormState, formData: FormData): Promise<LeadFormState> {
+  const user = await requireUser();
+  const parsed = z.uuid().safeParse(formData.get("id"));
+  if (!parsed.success) return { error: "Prospect introuvable." };
+
+  try {
+    await deleteLead(user, parsed.data);
+  } catch (error) {
+    return failure(error, {});
+  }
+  redirect("/prospects?ok=deleted");
 }
 
 export async function markLostAction(_previous: LeadFormState, formData: FormData): Promise<LeadFormState> {

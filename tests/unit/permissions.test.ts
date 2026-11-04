@@ -16,6 +16,14 @@ describe("permissions", () => {
     expect(can("audit", "report:export")).toBe(false);
   });
 
+  it("réserve la suppression définitive d'un prospect au manager et à l'administrateur", () => {
+    expect(can("manager", "prospect:delete")).toBe(true);
+    expect(can("admin", "prospect:delete")).toBe(true);
+    for (const role of ["direction", "commercial", "audit"] as const) {
+      expect(can(role, "prospect:delete")).toBe(false);
+    }
+  });
+
   it("réserve l'administration des utilisateurs et des paramètres à l'administrateur", () => {
     for (const role of ROLES.filter((r) => r !== "admin")) {
       expect(can(role, "user:manage")).toBe(false);
