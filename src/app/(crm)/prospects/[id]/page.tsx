@@ -10,7 +10,7 @@ import { LostDialog } from "@/app/(crm)/prospects/_components/lost-dialog";
 import { buttonClasses } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { lossReasonLabel, stageLabel } from "@/features/leads/config";
-import { getLead, getThresholds, listActiveProducts, type LeadDetail } from "@/features/leads/service";
+import { getLead, getThresholds, type LeadDetail } from "@/features/leads/service";
 import { can } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/session";
 import { AppError } from "@/lib/errors";
@@ -118,7 +118,7 @@ async function LeadContent({ params }: { params: Promise<{ id: string }> }) {
     );
   }
 
-  const [products, thresholds] = await Promise.all([listActiveProducts(), getThresholds()]);
+  const thresholds = await getThresholds();
 
   return (
     <div className="max-w-4xl">
@@ -143,7 +143,6 @@ async function LeadContent({ params }: { params: Promise<{ id: string }> }) {
           mode="update"
           leadId={lead.id}
           version={lead.version}
-          products={products}
           thresholds={thresholds}
           today={toDateInputValue(new Date())}
           initial={{
@@ -156,7 +155,7 @@ async function LeadContent({ params }: { params: Promise<{ id: string }> }) {
             email: lead.email,
             insertedOn: toDateInputValue(lead.insertedOn),
             progress: String(lead.progress),
-            productId: lead.productId ?? "",
+            productName: lead.productLabel ?? "",
             expectedRevenue: lead.expectedRevenue === null ? "" : String(lead.expectedRevenue),
           }}
         />

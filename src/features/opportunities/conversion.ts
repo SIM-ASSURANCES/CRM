@@ -53,6 +53,18 @@ export async function convertLead(user: CurrentUser, input: ConvertLeadInput): P
     if (duplicates.length > 0) throw new AppError("CONFLICT", "Un compte similaire existe déjà.", { duplicates });
   }
 
+  // Le produit proposé est un texte libre : l'opportunité reprend le produit du catalogue dont le libellé correspond (sans tenir
+  // compte de la casse), sinon aucun. Sans texte saisi, on retombe sur le produit hérité du prospect (import, anciennes fiches).
+  const productName = lead.productName?.trim() || null;
+  const catalogProduct = productName
+    ? await db.product.findFirst({
+        where: { active: true, label: { equals: productName, mode: "insensitive" } },
+        select: { id: true },
+      })
+    : null;
+  const opportunityProductId = productName ? (catalogProduct?.id ?? null) : lead.productId;
+  const productLabel = productName ?? lead.product?.label ?? null;
+
   return db.$transaction(async (tx) => {
     // 1. Compte : existant (visible) ou créé à partir du prospect.
     let account: { id: string; legalName: string };
@@ -127,10 +139,10 @@ export async function convertLead(user: CurrentUser, input: ConvertLeadInput): P
     // 3. Opportunité : l'étape et le montant du prospect sont repris tels quels.
     const opportunity = await tx.opportunity.create({
       data: {
-        name: defaultOpportunityName(account.legalName, lead.product?.label ?? null, input.expectedCloseDate),
+        name: defaultOpportunityName(account.legalName, productLabel, input.expectedCloseDate),
         accountId: account.id,
         ownerUserId: lead.ownerUserId,
-        productId: lead.productId,
+        productId: opportunityProductId,
         amount: lead.expectedRevenue ?? 0,
         revenuePeriod: "annual",
         stage: lead.progress,

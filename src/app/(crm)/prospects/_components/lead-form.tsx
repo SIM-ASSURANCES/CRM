@@ -13,7 +13,6 @@ import { Field } from "@/components/ui/field";
 import { SelectField } from "@/components/ui/select";
 import {
   PROGRESS_STEPS,
-  SECTORS,
   STAGE_CRITERIA,
   STAGE_LABELS,
   type LeadThresholds,
@@ -21,7 +20,6 @@ import {
 
 type LeadFormProps = {
   mode: "create" | "update";
-  products: { id: string; label: string }[];
   thresholds: LeadThresholds;
   /** Date du jour (AAAA-MM-JJ) : borne maximale du champ « date d'insertion ». */
   today: string;
@@ -32,7 +30,7 @@ type LeadFormProps = {
 
 const INITIAL_STATE: LeadFormState = {};
 
-export function LeadForm({ mode, products, thresholds, today, initial, leadId, version }: LeadFormProps) {
+export function LeadForm({ mode, thresholds, today, initial, leadId, version }: LeadFormProps) {
   const [state, formAction, pending] = useActionState(
     mode === "create" ? createLeadAction : updateLeadAction,
     INITIAL_STATE,
@@ -82,13 +80,14 @@ export function LeadForm({ mode, products, thresholds, today, initial, leadId, v
       <fieldset className="grid gap-5 sm:grid-cols-2">
         <legend className="mb-4 text-lg font-semibold text-ink">Entreprise</legend>
         <Field label="Nom de l'entreprise" name="companyName" required defaultValue={values.companyName} error={error("companyName")} />
-        <SelectField
+        <Field
           label="Secteur d'activité"
           name="sector"
           required
-          placeholder="Sélectionner…"
-          defaultValue={values.sector ?? ""}
-          options={SECTORS.map((sector) => ({ value: sector, label: sector }))}
+          autoComplete="off"
+          maxLength={120}
+          placeholder="Ex. : Santé, BTP, Banque…"
+          defaultValue={values.sector}
           error={error("sector")}
         />
       </fieldset>
@@ -144,14 +143,15 @@ export function LeadForm({ mode, products, thresholds, today, initial, leadId, v
           À cette étape, renseignez le produit proposé et le chiffre d&apos;affaires attendu de l&apos;offre.
         </p>
         <div className="grid gap-5 sm:grid-cols-2">
-          <SelectField
+          <Field
             label="Produit proposé"
-            name="productId"
+            name="productName"
             required={needsQualification}
-            placeholder="Sélectionner…"
-            defaultValue={values.productId ?? ""}
-            options={products.map((product) => ({ value: product.id, label: product.label }))}
-            error={error("productId")}
+            autoComplete="off"
+            maxLength={120}
+            placeholder="Saisissez le produit proposé"
+            defaultValue={values.productName}
+            error={error("productName")}
           />
           <Field
             label="Chiffre d'affaires attendu (FCFA)"

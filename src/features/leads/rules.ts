@@ -9,13 +9,13 @@ export type FieldErrors = Record<string, string[]>;
  * Retourne les erreurs par champ, ou null si tout est conforme.
  */
 export function validateLeadRules(
-  input: { progress: number; productId?: string; expectedRevenue?: number; wonConfirmed: boolean },
+  input: { progress: number; productName?: string; expectedRevenue?: number; wonConfirmed: boolean },
   thresholds: LeadThresholds,
 ): FieldErrors | null {
   const fieldErrors: FieldErrors = {};
 
   if (input.progress > thresholds.qualifiedAbove) {
-    if (!input.productId) fieldErrors.productId = ["Le produit proposé est obligatoire à cette étape."];
+    if (!input.productName) fieldErrors.productName = ["Le produit proposé est obligatoire à cette étape."];
     if (input.expectedRevenue === undefined) {
       fieldErrors.expectedRevenue = ["Le chiffre d'affaires attendu est obligatoire à cette étape."];
     }

@@ -218,7 +218,10 @@ model Lead {
   progress               Int       @default(10)
   // open | won | lost
   status                 String    @default("open")
+  // Produit du catalogue : hérité des prospects importés ou créés avant la saisie libre ; plus renseigné par le formulaire.
   productId              String?   @map("product_id") @db.Uuid
+  // Produit proposé, saisi librement par le commercial (c'est lui qui est affiché ; `productId` n'est qu'un repli).
+  productName            String?   @map("product_name")
   // Valeur de l'offre commerciale en FCFA (définition du revenu à confirmer : plan, section 12, question 6).
   expectedRevenue        Decimal?  @map("expected_revenue") @db.Decimal(18, 2)
   currency               String    @default("XOF")

@@ -502,6 +502,8 @@ type ParsedLead = {
   progress: number;
   status: "open" | "won" | "lost";
   productId?: string;
+  /** Libellé du produit retrouvé dans le catalogue : affiché comme produit proposé. */
+  productName?: string;
   expectedRevenue?: number;
   lossReason?: string;
   ownerUserId: string;
@@ -560,6 +562,7 @@ async function importRow(entity: ImportEntity, row: { id: string; parsed: Prisma
           // La date de clôture d'un prospect gagné ou perdu est inconnue de la source : on retient sa date d'insertion.
           closedAt: p.status === "open" ? null : insertedOn,
           productId: p.productId ?? null,
+          productName: p.productName ?? null,
           expectedRevenue: p.expectedRevenue ?? null,
           currency: CURRENCY,
           lossReason: p.lossReason ?? null,

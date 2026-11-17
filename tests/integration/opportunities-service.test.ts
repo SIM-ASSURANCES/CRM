@@ -433,7 +433,7 @@ describe.skipIf(!hasDb)("opportunités et conversion (PostgreSQL)", () => {
 
   describe("conversion d'un prospect (CDC A.8)", () => {
     it("crée compte, contact et opportunité en conservant le prospect et son historique", async () => {
-      const lead = await leadsSvc.createLead(a, leadInput({ companyName: "Prospect Converti SA", progress: 60, productId, expectedRevenue: 6_245_790 }));
+      const lead = await leadsSvc.createLead(a, leadInput({ companyName: "Prospect Converti SA", progress: 60, productName: "Produit test", expectedRevenue: 6_245_790 }));
       const result = await conv.convertLead(a, convertInput(lead.id));
 
       expect(result.createdAccount).toBe(true);
@@ -451,6 +451,22 @@ describe.skipIf(!hasDb)("opportunités et conversion (PostgreSQL)", () => {
       expect(stored.convertedAt).not.toBeNull();
       expect(stored.events.length).toBeGreaterThan(0);
       expect(await db.auditLog.count({ where: { entityId: lead.id, action: "lead.converted" } })).toBe(1);
+    });
+
+    it("retrouve le produit du catalogue par son libellé (casse ignorée) ; un produit inconnu laisse l'opportunité sans produit", async () => {
+      // Domaines d'e-mail distincts : sinon la détection de doublons de comptes se déclenche entre les deux conversions.
+      const matched = await leadsSvc.createLead(
+        a,
+        leadInput({ email: `a@${randomUUID().slice(0, 8)}.ci`, progress: 60, productName: "PRODUIT TEST", expectedRevenue: 1_000_000 }),
+      );
+      const unknown = await leadsSvc.createLead(
+        a,
+        leadInput({ email: `b@${randomUUID().slice(0, 8)}.ci`, progress: 60, productName: "Produit sur mesure", expectedRevenue: 1_000_000 }),
+      );
+      const one = await conv.convertLead(a, convertInput(matched.id));
+      const two = await conv.convertLead(a, convertInput(unknown.id));
+      expect((await opp.getOpportunity(a, one.opportunityId)).productId).toBe(productId);
+      expect((await opp.getOpportunity(a, two.opportunityId)).productId).toBeNull();
     });
 
     it("refuse une seconde conversion du même prospect", async () => {
@@ -516,7 +532,7 @@ describe.skipIf(!hasDb)("opportunités et conversion (PostgreSQL)", () => {
       await expect(conv.convertLead(b, convertInput(lead.id))).rejects.toMatchObject({ code: "NOT_FOUND" });
       await expect(conv.convertLead(audit, convertInput(lead.id))).rejects.toMatchObject({ code: "FORBIDDEN" });
 
-      const won = await leadsSvc.createLead(a, leadInput({ progress: 100, productId, expectedRevenue: 1_000_000, wonConfirmed: true }));
+      const won = await leadsSvc.createLead(a, leadInput({ progress: 100, productName: "Produit test", expectedRevenue: 1_000_000, wonConfirmed: true }));
       await expect(conv.convertLead(a, convertInput(won.id))).rejects.toMatchObject({ code: "VALIDATION" });
     });
   });

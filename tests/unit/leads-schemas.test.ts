@@ -22,7 +22,7 @@ const valid = {
   jobTitle: "Responsable achats",
   insertedOn: TODAY,
   progress: "20",
-  productId: "",
+  productName: "",
   expectedRevenue: "",
 };
 
@@ -39,10 +39,29 @@ describe("createLeadSchema", () => {
     expect(result.data.phone).toBe("+2250707353673");
     expect(result.data.email).toBe("koffi.gado@client.ci");
     expect(result.data.progress).toBe(20);
-    expect(result.data.productId).toBeUndefined();
+    expect(result.data.productName).toBeUndefined();
     expect(result.data.expectedRevenue).toBeUndefined();
     expect(result.data.insertedOn).toEqual(new Date(`${TODAY}T00:00:00.000Z`));
     expect(result.data.wonConfirmed).toBe(false);
+  });
+
+  it("accepte un secteur d'activité et un produit proposé saisis librement (plus de liste imposée)", () => {
+    const result = createLeadSchema.safeParse({
+      ...valid,
+      sector: "  Bois et ameublement sur mesure ",
+      productName: "  Flotte auto PME ",
+    });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.sector).toBe("Bois et ameublement sur mesure");
+    expect(result.data.productName).toBe("Flotte auto PME");
+  });
+
+  it("exige un secteur d'activité renseigné et borne la longueur des deux champs libres", () => {
+    expect(messages({ ...valid, sector: "" })).toContain("Secteur d'activité obligatoire.");
+    expect(messages({ ...valid, sector: "   " })).toContain("Secteur d'activité obligatoire.");
+    expect(messages({ ...valid, sector: "x".repeat(121) })).toContain("Secteur d'activité : 120 caractères au maximum.");
+    expect(messages({ ...valid, productName: "x".repeat(121) })).toContain("Produit proposé : 120 caractères au maximum.");
   });
 
   it("n'accepte que la date du jour : ni une date passée, ni une date future", () => {
@@ -67,8 +86,7 @@ describe("createLeadSchema", () => {
     expect(leadFieldsSchema.safeParse({ ...valid, insertedOn: dayOffset(-30) }).success).toBe(true);
   });
 
-  it("refuse un secteur hors liste, une étape inconnue, un e-mail et un téléphone invalides", () => {
-    expect(messages({ ...valid, sector: "Inconnu" })).toContain("Secteur d'activité obligatoire.");
+  it("refuse une étape inconnue, un e-mail et un téléphone invalides", () => {
     expect(messages({ ...valid, progress: "30" })).toContain("Étape du process de vente invalide.");
     expect(messages({ ...valid, email: "pas-un-mail" })).toContain("Adresse e-mail invalide.");
     expect(messages({ ...valid, phone: "123" })).toContain("Numéro de téléphone invalide : 10 chiffres pour la Côte d'Ivoire (exemple : 01 02 03 04 05), ou un numéro international en +.");

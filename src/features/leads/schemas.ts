@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { LOSS_REASON_CODES, SECTORS, isProgress } from "@/features/leads/config";
+import { LOSS_REASON_CODES, isProgress } from "@/features/leads/config";
 import { phoneSchema } from "@/lib/phone";
 
 // Validation des entrées (formulaires et API). Messages en français, affichés sous les champs.
@@ -65,7 +65,8 @@ const checkbox = z.preprocess((value) => value === "on" || value === "true" || v
 
 export const leadFieldsSchema = z.object({
   companyName: required("Nom de l'entreprise"),
-  sector: z.enum(SECTORS, { error: "Secteur d'activité obligatoire." }),
+  // Saisie libre : le commercial écrit le secteur d'activité du prospect (plus de liste imposée).
+  sector: required("Secteur d'activité", 120),
   contactLastName: required("Nom du prospect", 100),
   contactFirstName: required("Prénom du prospect", 100),
   phone,
@@ -74,7 +75,8 @@ export const leadFieldsSchema = z.object({
   insertedOn,
   progress,
   // Exigés quand le prospect franchit le seuil de qualification (règle vérifiée dans le service, seuils paramétrables).
-  productId: optional(z.uuid({ error: "Produit invalide." })),
+  // Produit proposé : saisie libre (texte).
+  productName: optional(z.string().trim().max(120, "Produit proposé : 120 caractères au maximum.")),
   expectedRevenue: optional(money),
   // Passage à 100 % : contrat signé ET premier paiement validé (CDC 14).
   wonConfirmed: checkbox,

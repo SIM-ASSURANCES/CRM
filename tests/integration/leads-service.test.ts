@@ -17,7 +17,8 @@ describe.skipIf(!hasDb)("service des prospects (PostgreSQL)", () => {
   let db: Db;
   let svc: Service;
   let kpi: Kpi;
-  let productId: string;
+  // Produit proposé : texte libre saisi par le commercial.
+  const productName = "Produit test";
   let a: CurrentUser;
   let b: CurrentUser;
   let direction: CurrentUser;
@@ -70,9 +71,6 @@ describe.skipIf(!hasDb)("service des prospects (PostgreSQL)", () => {
     b = await makeUser("commercial", "Commercial B", suffix);
     direction = await makeUser("direction", "Direction", suffix);
     audit = await makeUser("audit", "Audit", suffix);
-    productId = (
-      await db.product.upsert({ where: { code: "test-produit" }, update: {}, create: { code: "test-produit", label: "Produit test" } })
-    ).id;
   });
 
   beforeEach(async () => {
@@ -115,17 +113,35 @@ describe.skipIf(!hasDb)("service des prospects (PostgreSQL)", () => {
     it("exige produit et chiffre d'affaires au-delà du seuil de qualification", async () => {
       await expect(svc.createLead(a, leadInput({ progress: 60 }))).rejects.toMatchObject({
         code: "VALIDATION",
-        details: { fieldErrors: { productId: expect.any(Array), expectedRevenue: expect.any(Array) } },
+        details: { fieldErrors: { productName: expect.any(Array), expectedRevenue: expect.any(Array) } },
       });
 
-      const ok = await svc.createLead(a, leadInput({ progress: 60, productId, expectedRevenue: 6245790 }));
+      const ok = await svc.createLead(a, leadInput({ progress: 60, productName, expectedRevenue: 6245790 }));
       expect(ok.destinations).toEqual(["qualifies"]);
     });
 
-    it("refuse un produit inexistant", async () => {
-      await expect(
-        svc.createLead(a, leadInput({ progress: 60, productId: randomUUID(), expectedRevenue: 1 })),
-      ).rejects.toMatchObject({ code: "VALIDATION" });
+    it("accepte un secteur d'activité et un produit saisis librement", async () => {
+      const created = await svc.createLead(
+        a,
+        leadInput({ sector: "Bois et ameublement sur mesure", progress: 60, productName: "Flotte auto PME", expectedRevenue: 2_000_000 }),
+      );
+      const detail = await svc.getLead(a, created.id);
+      expect(detail.sector).toBe("Bois et ameublement sur mesure");
+      expect(detail.productLabel).toBe("Flotte auto PME");
+      expect(await db.lead.findUniqueOrThrow({ where: { id: created.id } })).toMatchObject({ productName: "Flotte auto PME", productId: null });
+    });
+
+    it("modifier le produit remplace le texte et abandonne le lien avec l'ancien produit du catalogue", async () => {
+      const product = await db.product.upsert({ where: { code: "test-produit" }, update: {}, create: { code: "test-produit", label: "Produit test" } });
+      const base = leadInput();
+      const { id } = await svc.createLead(a, base);
+      // Ancienne fiche : produit du catalogue, sans texte.
+      await db.lead.update({ where: { id }, data: { productId: product.id, productName: null } });
+      expect((await svc.getLead(a, id)).productLabel).toBe("Produit test");
+
+      await svc.updateLead(a, { ...base, id, version: 1, productName: "Garantie décennale" });
+      expect((await svc.getLead(a, id)).productLabel).toBe("Garantie décennale");
+      expect(await db.lead.findUniqueOrThrow({ where: { id } })).toMatchObject({ productName: "Garantie décennale", productId: null });
     });
   });
 
@@ -189,7 +205,7 @@ describe.skipIf(!hasDb)("service des prospects (PostgreSQL)", () => {
       const base = leadInput();
       const { id } = await svc.createLead(a, base);
 
-      const result = await svc.updateLead(a, { ...base, id, version: 1, progress: 80, productId, expectedRevenue: 1_000_000 });
+      const result = await svc.updateLead(a, { ...base, id, version: 1, progress: 80, productName, expectedRevenue: 1_000_000 });
       expect(result.destinations).toEqual(["propositions", "pipeline"]);
 
       const lead = await db.lead.findUniqueOrThrow({ where: { id }, include: { events: { orderBy: { occurredAt: "asc" } } } });
@@ -221,7 +237,7 @@ describe.skipIf(!hasDb)("service des prospects (PostgreSQL)", () => {
 
   describe("clôture", () => {
     it("exige la confirmation du contrat signé et du premier paiement, puis verrouille la fiche", async () => {
-      const base = leadInput({ progress: 90, productId, expectedRevenue: 500_000 });
+      const base = leadInput({ progress: 90, productName, expectedRevenue: 500_000 });
       const { id } = await svc.createLead(a, base);
       const toWon = { ...base, id, version: 1, progress: 100 as const };
 
@@ -309,9 +325,9 @@ describe.skipIf(!hasDb)("service des prospects (PostgreSQL)", () => {
   describe("écrans de reporting", () => {
     it("répartit chaque prospect dans l'écran qui correspond à son étape", async () => {
       await svc.createLead(a, leadInput({ progress: 10 }));
-      await svc.createLead(a, leadInput({ progress: 60, productId, expectedRevenue: 1 }));
-      await svc.createLead(a, leadInput({ progress: 80, productId, expectedRevenue: 1 }));
-      await svc.createLead(a, leadInput({ progress: 100, productId, expectedRevenue: 1, wonConfirmed: true }));
+      await svc.createLead(a, leadInput({ progress: 60, productName, expectedRevenue: 1 }));
+      await svc.createLead(a, leadInput({ progress: 80, productName, expectedRevenue: 1 }));
+      await svc.createLead(a, leadInput({ progress: 100, productName, expectedRevenue: 1, wonConfirmed: true }));
 
       const total = async (view: LeadView) => (await svc.listLeads(a, { view })).total;
       expect(await total("prospects")).toBe(1);

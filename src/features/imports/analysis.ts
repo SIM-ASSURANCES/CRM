@@ -433,11 +433,13 @@ function normalizeLead(record: Record<string, string>, defaults: ImportDefaults,
   }
 
   let productId: string | undefined;
+  let productLabel: string | undefined;
   let productUnknown = false;
   if (record.productName) {
     const product = resolveProduct(record.productName, ctx.products, ctx.valueMap.product);
     if (product) {
       productId = product.id;
+      productLabel = product.label;
     } else {
       productUnknown = true;
       unrecognized.push({ field: "product", key: productKey(record.productName), value: record.productName });
@@ -477,7 +479,7 @@ function normalizeLead(record: Record<string, string>, defaults: ImportDefaults,
     jobTitle: record.jobTitle,
     insertedOn,
     progress,
-    productId,
+    productName: productLabel,
     expectedRevenue: record.expectedRevenue,
     wonConfirmed: progress === 100,
   });
@@ -485,17 +487,17 @@ function normalizeLead(record: Record<string, string>, defaults: ImportDefaults,
 
   if (parsed.success) {
     const ruleErrors = validateLeadRules(
-      { progress: parsed.data.progress, productId: parsed.data.productId, expectedRevenue: parsed.data.expectedRevenue, wonConfirmed: parsed.data.wonConfirmed },
+      { progress: parsed.data.progress, productName: parsed.data.productName, expectedRevenue: parsed.data.expectedRevenue, wonConfirmed: parsed.data.wonConfirmed },
       ctx.thresholds,
     );
     for (const [key, messages] of Object.entries(ruleErrors ?? {})) {
       // Produit inconnu : déjà signalé avec sa valeur d'origine, inutile de répéter « produit obligatoire ».
-      if (key === "productId" && productUnknown) continue;
-      errors.push(`${key === "productId" ? "Produit proposé" : fieldLabel("leads", key)} : ${messages[0]}`);
+      if (key === "productName" && productUnknown) continue;
+      errors.push(`${key === "productName" ? "Produit proposé" : fieldLabel("leads", key)} : ${messages[0]}`);
     }
   }
 
-  return { errors, warnings, unrecognized, data: parsed.success ? parsed.data : null, status, lossReason, ownerUserId, insertedOn };
+  return { errors, warnings, unrecognized, data: parsed.success ? parsed.data : null, status, lossReason, ownerUserId, insertedOn, productId };
 }
 
 /**
@@ -515,7 +517,7 @@ export function analyzeLeads(
   const seenIdentities = new Map<string, number>();
 
   for (const row of rows) {
-    const { errors, warnings, unrecognized, data, status, lossReason, ownerUserId, insertedOn } = normalizeLead(recordFromRow(row.cells, headers, mapping), defaults, ctx);
+    const { errors, warnings, unrecognized, data, status, lossReason, ownerUserId, insertedOn, productId } = normalizeLead(recordFromRow(row.cells, headers, mapping), defaults, ctx);
     const extras = { warnings, unrecognized };
     if (errors.length > 0 || !data || !insertedOn) {
       results.set(row.rowNumber, rejected(errors, extras));
@@ -556,7 +558,8 @@ export function analyzeLeads(
           insertedOn,
           progress: data.progress,
           status,
-          productId: data.productId,
+          productId,
+          productName: data.productName,
           expectedRevenue: data.expectedRevenue,
           lossReason,
           ownerUserId,

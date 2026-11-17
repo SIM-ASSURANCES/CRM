@@ -97,6 +97,15 @@ Code métier dans `src/features/leads/` : `config` (étapes, seuils, motifs de p
 - Les KPI comparent la semaine courante à la précédente ; leurs définitions sont documentées dans `kpi.ts`.
 - `npm run db:seed` crée 7 produits et, en développement, 12 prospects de démonstration pour `commercial@crm.local`
   avec un historique sur 5 semaines.
+- **Secteur d'activité et produit proposé en saisie libre** : le formulaire n'a plus de listes déroulantes, le commercial écrit
+  les deux valeurs (120 caractères au maximum ; le produit reste obligatoire au-delà du seuil de qualification). Le produit
+  est stocké dans `leads.product_name` ; la colonne `product_id` (catalogue) ne sert plus que de repli d'affichage pour les
+  prospects importés ou anciens (la migration `20261117090000_lead_product_name` a recopié leur libellé). À la conversion, l'opportunité
+  reprend le produit du catalogue dont le libellé correspond (casse ignorée), sinon elle n'a pas de produit à renseigner ensuite.
+  L'import de prospects continue, lui, de rapprocher le produit du catalogue.
+- **Tableau de bord individuel (manager)** : sur le tableau de bord, le manager choisit « Toute l'équipe » ou un de ses
+  commerciaux (`/?membre=<id>`) et voit les mêmes cinq indicateurs que ce commercial (`features/leads/team-view.ts`). Seuls
+  les membres actifs de son équipe sont accessibles ; tout autre identifiant ou rôle donne « page introuvable ».
 - **Suppression définitive** (`prospect:delete`, bouton « Supprimer » de la fiche, avec confirmation) : le manager supprime
   les prospects de son équipe, l'administrateur tous ; la direction, le commercial et l'audit ne le peuvent pas. Le prospect
   et son historique d'étapes sont supprimés (les statistiques des semaines passées ne le comptent plus) ; le compte, le
@@ -214,15 +223,15 @@ droits de chaque rôle ne changent pas : c'est un interrupteur global, en plus.
 
 ## Déploiement (Docker, Dokploy)
 
-Image `ghcr.io/sim-assurances/crm:v4` (`Dockerfile`, `docker-entrypoint.sh`), publiée sur `https://crm.mysimassurances.com`
+Image `ghcr.io/sim-assurances/crm:v5` (`Dockerfile`, `docker-entrypoint.sh`), publiée sur `https://crm.mysimassurances.com`
 avec `docker-compose.raw.yml` (Dokploy → Compose → Raw). Au déploiement, tout est automatique : migrations, création du
 premier administrateur (mot de passe temporaire généré et affiché une fois dans les journaux s'il n'est pas fourni),
 domaine HTTPS et tâches planifiées. Variables d'environnement, mise à jour, sauvegarde et retour arrière : voir
 [docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md).
 
 ```bash
-docker build -t ghcr.io/sim-assurances/crm:v4 .
-docker push ghcr.io/sim-assurances/crm:v4
+docker build -t ghcr.io/sim-assurances/crm:v5 .
+docker push ghcr.io/sim-assurances/crm:v5
 ```
 
 ## Migration de données (phase 7)

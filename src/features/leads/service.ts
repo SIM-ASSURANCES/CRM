@@ -39,7 +39,6 @@ export type LeadRow = {
 export type LeadDetail = LeadRow & {
   contactLastName: string;
   contactFirstName: string;
-  productId: string | null;
   lossReason: string | null;
   lossComment: string | null;
   version: number;
@@ -83,7 +82,8 @@ function toRow(lead: LeadWithRelations): LeadRow {
     insertedOn: lead.insertedOn,
     progress: lead.progress,
     status: lead.status,
-    productLabel: lead.product?.label ?? null,
+    // Saisie libre d'abord ; le produit du catalogue (prospects importés ou anciens) sert de repli.
+    productLabel: lead.productName ?? lead.product?.label ?? null,
     expectedRevenue: lead.expectedRevenue === null ? null : Number(lead.expectedRevenue),
     ownerName: lead.owner.name,
   };
@@ -94,7 +94,6 @@ function toDetail(lead: LeadWithRelations): LeadDetail {
     ...toRow(lead),
     contactLastName: lead.contactLastName,
     contactFirstName: lead.contactFirstName,
-    productId: lead.productId,
     lossReason: lead.lossReason,
     lossComment: lead.lossComment,
     version: lead.version,
@@ -151,12 +150,6 @@ function insertedOnError(message: string): never {
 function assertInsertedToday(insertedOn: Date, now: Date): void {
   const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   if (insertedOn.getTime() !== today) insertedOnError(INSERTED_ON_TODAY_MESSAGE);
-}
-
-async function assertActiveProduct(tx: Prisma.TransactionClient, productId?: string): Promise<void> {
-  if (!productId) return;
-  const product = await tx.product.findFirst({ where: { id: productId, active: true }, select: { id: true } });
-  if (!product) throw errors.validation("Produit invalide.", { fieldErrors: { productId: ["Produit invalide."] } });
 }
 
 // --- Lecture -----------------------------------------------------------------------------------------------------
@@ -264,7 +257,6 @@ export async function createLead(user: CurrentUser, input: CreateLeadInput, now:
   }
 
   return db.$transaction(async (tx) => {
-    await assertActiveProduct(tx, input.productId);
     const won = input.progress === 100;
 
     const lead = await tx.lead.create({
@@ -280,7 +272,7 @@ export async function createLead(user: CurrentUser, input: CreateLeadInput, now:
         progress: input.progress,
         status: won ? "won" : "open",
         closedAt: won ? new Date() : null,
-        productId: input.productId ?? null,
+        productName: input.productName ?? null,
         expectedRevenue: input.expectedRevenue ?? null,
         currency: CURRENCY,
         ownerUserId: user.id,
@@ -326,7 +318,6 @@ export async function updateLead(user: CurrentUser, input: UpdateLeadInput): Pro
     }
     // La date d'insertion fixe la semaine du prospect dans les KPI et l'historique : elle ne se modifie pas après coup.
     if (existing.insertedOn.getTime() !== input.insertedOn.getTime()) insertedOnError("La date d'insertion ne peut pas être modifiée.");
-    await assertActiveProduct(tx, input.productId);
 
     const won = input.progress === 100;
     const newRevenue = input.expectedRevenue ?? null;
@@ -347,7 +338,9 @@ export async function updateLead(user: CurrentUser, input: UpdateLeadInput): Pro
         progress: input.progress,
         status: won ? "won" : "open",
         closedAt: won ? new Date() : null,
-        productId: input.productId ?? null,
+        // Le produit est désormais le texte saisi : le lien éventuel avec le catalogue (ancien produit) est abandonné.
+        productName: input.productName ?? null,
+        productId: null,
         expectedRevenue: newRevenue,
         version: { increment: 1 },
       },
@@ -364,7 +357,7 @@ export async function updateLead(user: CurrentUser, input: UpdateLeadInput): Pro
       existing.jobTitle !== input.jobTitle && "jobTitle",
       existing.insertedOn.getTime() !== input.insertedOn.getTime() && "insertedOn",
       existing.progress !== input.progress && "progress",
-      existing.productId !== (input.productId ?? null) && "productId",
+      existing.productName !== (input.productName ?? null) && "productName",
       oldRevenue !== newRevenue && "expectedRevenue",
     ].filter((field): field is string => typeof field === "string");
 
